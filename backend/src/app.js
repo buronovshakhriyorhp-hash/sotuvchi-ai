@@ -7,6 +7,7 @@ const staticFiles = require('@fastify/static');
 const helmet = require('@fastify/helmet');
 const rateLimit = require('@fastify/rate-limit');
 const path = require('path');
+const client = require('prom-client');
 require('dotenv').config();
 
 const cache = require('./utils/cache');
@@ -88,6 +89,24 @@ function buildApp() {
     } catch {
       reply.status(401).send({ success: false, error: 'Token yaroqsiz yoki muddati o\'tgan' });
     }
+  });
+
+  if (process.env.FORCE_HTTPS === 'true') {
+    app.addHook('onRequest', async (request, reply) => {
+      const proto = request.headers['x-forwarded-proto'] || request.protocol;
+      if (proto && proto.toLowerCase() === 'http') {
+        const host = request.headers.host;
+        const url = `https://${host}${request.raw.url}`;
+        reply.redirect(301, url);
+      }
+    });
+  }
+
+  // Prometheus metrics endpoint for monitoring
+  const collectDefaultMetrics = client.collectDefaultMetrics;
+  collectDefaultMetrics({ timeout: 5000 });
+  app.get('/metrics', async () => {
+    return await client.register.metrics();
   });
 
   // Health check

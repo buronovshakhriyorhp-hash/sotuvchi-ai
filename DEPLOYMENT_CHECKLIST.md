@@ -202,6 +202,13 @@ docker-compose up -d
 - [ ] Monitor response times
 - [ ] Track database connections
 - [ ] Watch Redis memory and eviction rate
+- [ ] Use `/metrics` for Prometheus scraping
+
+### Backup Strategy
+- [ ] Implement automated PostgreSQL backups
+- [ ] Use `pg_dump` or snapshot backup for data recovery
+- [ ] Store backups off-host and verify restore procedure
+- [ ] Add backup schedule to deployment runbook
 
 ---
 
