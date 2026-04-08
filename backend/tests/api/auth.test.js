@@ -1,17 +1,43 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import request from 'supertest';
-// Simulating imports if we want to run against a fully loaded server
-// For now, we will test the live staging/dev server at localhost:5000 
-// or an initialized fastify instance. Since server requires DB, we test live dev API.
+import dotenv from 'dotenv';
+import path from 'path';
+import { createRequire } from 'module';
+import bcrypt from 'bcryptjs';
 
-const API_URL = process.env.VITE_API_URL || 'http://localhost:5000/api';
+dotenv.config({ path: path.resolve(new URL('../../.env.test', import.meta.url).pathname), override: true });
+
+const require = createRequire(import.meta.url);
+const buildApp = require('../../src/app.js');
+const prisma = require('../../src/prisma.js');
+
+let app;
+
+beforeAll(async () => {
+  app = buildApp();
+  await app.ready();
+  await prisma.$connect();
+
+  // Seed test user
+  const hash = await bcrypt.hash('password123', 10);
+  await prisma.user.upsert({
+    where: { phone: '998901234567' },
+    update: { passwordHash: hash },
+    create: { name: 'Test User', phone: '998901234567', passwordHash: hash, role: 'ADMIN' },
+  });
+});
+
+afterAll(async () => {
+  await app.close();
+  await prisma.$disconnect();
+});
 
 describe('Authentication API & State (High Priority)', () => {
     let token = '';
 
     it('should reject invalid credentials', async () => {
-        const res = await request(API_URL)
-            .post('/auth/login')
+        const res = await request(app.server)
+            .post('/api/auth/login')
             .send({
                 phone: '998901234567',
                 password: 'wrong_password'
@@ -22,31 +48,29 @@ describe('Authentication API & State (High Priority)', () => {
     });
 
     it('should login with valid admin credentials (staging/test user)', async () => {
-        // Fallback for automation to ensure we can log in.
-        // Assuming dev seed contains '998901234567' / 'admin123'
-        const res = await request(API_URL)
-            .post('/auth/login')
+        // Assuming dev seed contains '998901234567' / 'password123'
+        const res = await request(app.server)
+            .post('/api/auth/login')
             .send({
                 phone: '998901234567',
                 password: 'password123'
             });
 
-        // We accept 200 or 401 if user doesn't exist yet in the DB.
         if (res.status === 200) {
-            expect(res.body).toHaveProperty('token');
-            token = res.body.token;
+            expect(res.body).toHaveProperty('data.token');
+            token = res.body.data.token;
         }
     });
 
     it('should fetch user profile with token', async () => {
         if (!token) return; // Skip if no token grabbed
 
-        const res = await request(API_URL)
-            .get('/auth/me')
+        const res = await request(app.server)
+            .get('/api/auth/me')
             .set('Authorization', `Bearer ${token}`);
             
         expect(res.status).toBe(200);
-        expect(res.body).toHaveProperty('id');
-        expect(res.body).toHaveProperty('role');
+        expect(res.body).toHaveProperty('data.id');
+        expect(res.body).toHaveProperty('data.role');
     });
 });

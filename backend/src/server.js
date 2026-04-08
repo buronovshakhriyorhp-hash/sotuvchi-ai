@@ -32,11 +32,13 @@ const start = async () => {
   process.on('SIGTERM', () => closeServer('SIGTERM'));
 
   try {
-    // Initialize Telegram Bot
-    try {
-      require('./services/bot.service');
-    } catch (botErr) {
-      console.error('Telegram Bot init error:', botErr.message);
+    // Initialize Telegram Bot outside of unit/test environment
+    if (process.env.NODE_ENV !== 'test') {
+      try {
+        require('./services/bot.service');
+      } catch (botErr) {
+        console.error('Telegram Bot init error:', botErr.message);
+      }
     }
 
     const port = parseInt(process.env.PORT) || 5000;

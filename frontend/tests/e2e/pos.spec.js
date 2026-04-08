@@ -12,8 +12,9 @@ test.describe('POS Checkout Flow @regression', () => {
         await page.fill('input[type="password"]', 'admin123');
         await page.click('button[type="submit"]');
         await page.waitForNavigation();
-    } catch(e) {}
-  });
+    } catch (error) {
+      console.warn('Login failed:', error);
+    }
 
   test('should be able to add an item to the basket and checkout', async ({ page }) => {
     // Navigate to POS

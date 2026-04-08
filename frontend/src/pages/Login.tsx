@@ -2,8 +2,8 @@ import React, { useState } from 'react';
 import useAuth from '../store/useAuth';
 
 export default function Login() {
-  const [phone, setPhone] = useState('+998941009122');
-  const [password, setPassword] = useState('@gumsmass645');
+  const [phone, setPhone] = useState('');
+  const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const login = useAuth(s => s.login);
@@ -46,7 +46,7 @@ export default function Login() {
         </form>
 
         <div style={{ textAlign:'center', marginTop:'1.5rem', fontSize:'0.8rem', color:'var(--text-muted)' }}>
-          <div>Demo: +998941009122 / @gumsmass645</div>
+          <div>Demo uchun admin credentials: +998941009122 / [parolni seed.js dan ko'ring]</div>
         </div>
       </div>
     </div>

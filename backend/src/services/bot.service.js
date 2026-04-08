@@ -1,5 +1,5 @@
 /* eslint-disable no-unused-vars */
-const TelegramBot = require('node-telegram-bot-api');
+const { Bot } = require('grammy');
 const prisma = require('../prisma');
 
 class BotService {
@@ -10,37 +10,40 @@ class BotService {
             return;
         }
 
-        // Initialize bot with polling
-        this.bot = new TelegramBot(this.token, { polling: true });
+        // Initialize bot
+        this.bot = new Bot(this.token);
         this.username = '';
         this.init();
     }
 
     async init() {
         try {
-            const botInfo = await this.bot.getMe();
+            const botInfo = await this.bot.api.getMe();
             this.username = botInfo.username;
             console.log(`Telegram Bot ishga tushdi: @${this.username}`);
 
             // Handlers
-            this.bot.onText(/\/start/, (msg) => this.handleStart(msg));
-            this.bot.onText(/\/report/, (msg) => this.handleReport(msg));
-            this.bot.onText(/\/expense (.+)/, (msg, match) => this.handleExpense(msg, match));
-            this.bot.on('message', (msg) => this.handleMessage(msg));
-            this.bot.on('contact', (msg) => this.handleContact(msg));
+            this.bot.command('start', (ctx) => this.handleStart(ctx));
+            this.bot.command('report', (ctx) => this.handleReport(ctx));
+            this.bot.hears(/^\/expense (.+)/, (ctx) => this.handleExpense(ctx));
+            this.bot.on('message', (ctx) => this.handleMessage(ctx));
+            this.bot.on('contact', (ctx) => this.handleContact(ctx));
             
             // Error handling
-            this.bot.on('polling_error', (error) => {
-                // console.error('Bot Polling Error:', error.message);
+            this.bot.catch((err) => {
+                console.error('Bot Error:', err);
             });
+
+            // Start bot
+            this.bot.start();
         } catch (error) {
             console.error('Bot init error:', error.message);
         }
     }
 
-    async handleStart(msg) {
-        const chatId = msg.chat.id;
-        const telegramId = msg.from.id.toString();
+    async handleStart(ctx) {
+        const chatId = ctx.chat.id;
+        const telegramId = ctx.from.id.toString();
 
         try {
             let user = await prisma.telegramUser.findUnique({ where: { telegramId } });
@@ -49,9 +52,9 @@ class BotService {
                 user = await prisma.telegramUser.create({
                     data: {
                         telegramId,
-                        firstName: msg.from.first_name,
-                        lastName: msg.from.last_name,
-                        username: msg.from.username,
+                        firstName: ctx.from.first_name,
+                        lastName: ctx.from.last_name,
+                        username: ctx.from.username,
                         chatId: chatId.toString(),
                         step: 'WAITING_NAME'
                     }
@@ -63,8 +66,8 @@ class BotService {
                 });
             }
 
-            await this.bot.sendMessage(chatId, 
-                `Assalomu alaykum, <b>${msg.from.first_name}</b>! \n\n` +
+            await ctx.reply(
+                `Assalomu alaykum, <b>${ctx.from.first_name}</b>! \n\n` +
                 `<b>Nexus ERP</b> tizimi botiga xush kelibsiz. \n\n` +
                 `Ro'yxatdan o'tishni boshlash uchun iltimos, <b>ismingizni</b> kiriting:`, 
                 { parse_mode: 'HTML' }
@@ -74,11 +77,12 @@ class BotService {
         }
     }
 
-    async handleMessage(msg) {
+    async handleMessage(ctx) {
+        const msg = ctx.message;
         if (!msg.text || msg.text.startsWith('/') || msg.contact) return;
 
-        const telegramId = msg.from.id.toString();
-        const chatId = msg.chat.id;
+        const telegramId = ctx.from.id.toString();
+        const chatId = ctx.chat.id;
 
         try {
             const user = await prisma.telegramUser.findUnique({ where: { telegramId } });
@@ -94,7 +98,7 @@ class BotService {
                     }
                 });
 
-                await this.bot.sendMessage(chatId, 
+                await ctx.reply(
                     `Rahmat, <b>${fullName}</b>! \n\n` +
                     `Endi esa, pastdagi tugmani bosish orqali <b>telefon raqamingizni</b> yuboring:`, 
                     { 
@@ -112,11 +116,12 @@ class BotService {
         }
     }
 
-    async handleContact(msg) {
+    async handleContact(ctx) {
+        const msg = ctx.message;
         if (!msg.contact) return;
 
-        const telegramId = msg.from.id.toString();
-        const chatId = msg.chat.id;
+        const telegramId = ctx.from.id.toString();
+        const chatId = ctx.chat.id;
         let phone = msg.contact.phone_number;
         if (!phone.startsWith('+')) phone = '+' + phone;
 
@@ -139,7 +144,7 @@ class BotService {
                     data: { phone, step: 'REGISTERED_STAFF' }
                 });
 
-                return await this.bot.sendMessage(chatId, 
+                return await ctx.reply(
                     `✅ <b>Xodim sifatida tanildingiz!</b> \n\n` +
                     `Ism: <b>${staff.name}</b> \n` +
                     `Lavozim: <b>${staff.role}</b> \n\n` +
@@ -179,7 +184,7 @@ class BotService {
                 data: { phone: phone, customerId: customerId, step: 'REGISTERED' }
             });
 
-            await this.bot.sendMessage(chatId, 
+            await ctx.reply(
                 `<b>Tabriklaymiz!</b> \n\n` +
                 `Siz mijoz sifatida muvaffaqiyatli ro'yxatdan o'tdingiz.`, 
                 { parse_mode: 'HTML', reply_markup: { remove_keyboard: true } }
@@ -187,18 +192,18 @@ class BotService {
 
         } catch (error) {
             console.error('handleContact error:', error);
-            await this.bot.sendMessage(chatId, "Xatolik yuz berdi.");
+            await ctx.reply("Xatolik yuz berdi.");
         }
     }
 
-    async handleReport(msg) {
-        const chatId = msg.chat.id;
-        const telegramId = msg.from.id.toString();
+    async handleReport(ctx) {
+        const chatId = ctx.chat.id;
+        const telegramId = ctx.from.id.toString();
 
         try {
             const tUser = await prisma.telegramUser.findUnique({ where: { telegramId } });
             if (!tUser || tUser.step !== 'REGISTERED_STAFF') {
-                return this.bot.sendMessage(chatId, "Bu buyruq faqat xodimlar uchun.");
+                return ctx.reply("Bu buyruq faqat xodimlar uchun.");
             }
 
             const today = new Date();
@@ -232,30 +237,30 @@ class BotService {
                 `📈 <b>Sof Foyda:</b> ${netProfitToday.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USD \n\n` +
                 `🔴 <b>Umumiy Qarzlar (Hozirgi):</b> ${totalDebt.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USD`;
 
-            await this.bot.sendMessage(chatId, report, { parse_mode: 'HTML' });
+            await ctx.reply(report, { parse_mode: 'HTML' });
         } catch (error) {
             console.error('handleReport error:', error);
         }
     }
 
-    async handleExpense(msg, match) {
-        const chatId = msg.chat.id;
-        const telegramId = msg.from.id.toString();
+    async handleExpense(ctx) {
+        const chatId = ctx.chat.id;
+        const telegramId = ctx.from.id.toString();
         
         try {
             const tUser = await prisma.telegramUser.findUnique({ where: { telegramId } });
             if (!tUser || tUser.step !== 'REGISTERED_STAFF') return;
 
-            const input = match[1].split(' ');
+            const input = ctx.match[1].split(' ');
             if (input.length < 2) {
-                return this.bot.sendMessage(chatId, "Format xato. Misol: <code>/expense 50000 Obed choy</code>", { parse_mode: 'HTML' });
+                return ctx.reply("Format xato. Misol: <code>/expense 50000 Obed choy</code>", { parse_mode: 'HTML' });
             }
 
             const amount = parseFloat(input[0]);
             const category = input[1];
             const description = input.slice(2).join(' ') || '';
 
-            if (isNaN(amount)) return this.bot.sendMessage(chatId, "Summa raqam bo'lishi kerak.");
+            if (isNaN(amount)) return ctx.reply("Summa raqam bo'lishi kerak.");
 
             const staff = await prisma.user.findFirst({ where: { phone: { contains: tUser.phone.replace(/\D/g, '').slice(-9) } } });
 
@@ -269,7 +274,7 @@ class BotService {
                 }
             });
 
-            await this.bot.sendMessage(chatId, `✅ <b>Xarajat saqlandi!</b> \n\nSumma: ${amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USD \nToifa: ${category}`, { parse_mode: 'HTML' });
+            await ctx.reply(`✅ <b>Xarajat saqlandi!</b> \n\nSumma: ${amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USD \nToifa: ${category}`, { parse_mode: 'HTML' });
         } catch (error) {
             console.error('handleExpense error:', error);
         }
@@ -324,7 +329,7 @@ class BotService {
                 message += `\n🔴 <b>Итого долг:</b> ${totalDebtAfter.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USD`;
             }
 
-            await this.bot.sendDocument(tUser.chatId, pdfBuffer, {
+            await this.bot.api.sendDocument(tUser.chatId, pdfBuffer, {
                 caption: message,
                 parse_mode: 'HTML'
             }, {

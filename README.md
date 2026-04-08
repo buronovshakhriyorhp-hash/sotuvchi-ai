@@ -1,16 +1,46 @@
-# React + Vite
+# Nexus ERP - Sotuv Tizimi
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Bu loyiha fullstack ERP tizimi bo'lib, savdo, ombor, mijozlar va moliya boshqaruvini ta'minlaydi. Backend Fastify + Prisma, frontend React + Vite bilan ishlab chiqilgan.
 
-Currently, two official plugins are available:
+## O'rnatish
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+1. Repository ni clone qiling.
+2. Backend va frontend uchun dependencies o'rnating:
+   ```bash
+   npm run install:all
+   ```
+3. Environment fayllarini sozlang (backend/.env va frontend/.env).
+4. Database ni sozlang va seed qiling:
+   ```bash
+   cd backend
+   npx prisma db push
+   npm run db:seed
+   ```
 
-## React Compiler
+## Ishga tushirish
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+Development:
+```bash
+npm run dev
+```
 
-## Expanding the ESLint configuration
+Production build:
+```bash
+npm run build
+```
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+## Xavfsizlik
+
+- JWT autentifikatsiya
+- Rate limiting
+- Helmet va CORS
+- Bcrypt parol hashing
+
+## Testlar
+
+Backend: `npm run test`
+Frontend: `npm run test:e2e`
+
+## Deployment
+
+Docker yoki cloud platformalarda ishga tushirish uchun environment variables ni to'g'ri sozlang.

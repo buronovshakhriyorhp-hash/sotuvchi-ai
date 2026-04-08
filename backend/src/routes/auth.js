@@ -8,7 +8,7 @@ const loginSchema = {
     required: ['phone', 'password'],
     properties: {
       phone: { type: 'string', minLength: 9 },
-      password: { type: 'string', minLength: 4 }
+      password: { type: 'string', minLength: 8 }
     }
   }
 };

@@ -18,7 +18,8 @@ async function main() {
   console.log(`✅ ${categories.length} ta kategoriya yaratildi`);
 
   // Admin user
-  const adminHash = await bcrypt.hash('@gumsmass645', 10);
+  const adminPassword = process.env.ADMIN_PASSWORD || 'AdminSecure123!';
+  const adminHash = await bcrypt.hash(adminPassword, 10);
   const admin = await prisma.user.upsert({
     where: { phone: '+998941009122' },
     update: {},
@@ -114,7 +115,7 @@ async function main() {
   console.log('🎉 Seed muvaffaqiyatli tugadi!');
   console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
   console.log('🔑 Login: +998941009122');
-  console.log('🔑 Parol: @gumsmass645');
+  console.log('🔑 Parol: Environment ADMIN_PASSWORD yoki default AdminSecure123!');
   console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
 }
 
