@@ -1,0 +1,156 @@
+const prisma = require('../prisma');
+const { sendSuccess } = require('../services/response.utility');
+
+async function reportRoutes(fastify) {
+  // GET /api/reports/dashboard — umumiy statistikalar
+  fastify.get('/dashboard', { preHandler: [fastify.authenticate] }, async (request, reply) => {
+    const { from, to } = request.query;
+    let dateFilter = {};
+    
+    if (from && to) {
+      dateFilter = { gte: new Date(from), lte: new Date(to + 'T23:59:59') };
+    } else {
+      const today = new Date(); today.setHours(0,0,0,0);
+      dateFilter = { gte: today };
+    }
+
+    const today = new Date(); today.setHours(0,0,0,0);
+    const week = new Date(); week.setDate(week.getDate() - 7);
+
+    const [rangeSales, todaySales, weekSales, totalCustomers, totalProducts, activeOrders, pendingDebts, allPayments] = await Promise.all([
+      prisma.sale.aggregate({ _sum: { total: true }, _count: true, where: { createdAt: dateFilter, status: 'completed' } }),
+      prisma.sale.aggregate({ _sum: { total: true }, _count: true, where: { createdAt: { gte: today }, status: 'completed' } }),
+      prisma.sale.aggregate({ _sum: { total: true }, _count: true, where: { createdAt: { gte: week }, status: 'completed' } }),
+      prisma.customer.count({ where: { isActive: true } }),
+      prisma.product.count({ where: { isActive: true } }),
+      prisma.order.count({ where: { status: { in: ['new', 'ready'] } } }),
+      prisma.debt.aggregate({ _sum: { amount: true }, _count: true, where: { status: { in: ['pending', 'overdue'] } } }),
+      prisma.payment.aggregate({ _sum: { amount: true } }),
+    ]);
+
+    const lowStock = await prisma.product.findMany({
+      where: { isActive: true, stock: { lte: 10 } },
+      select: { id: true, name: true, stock: true, minStock: true },
+      take: 10,
+    });
+
+    const topDebtors = await prisma.debt.findMany({
+      where: { status: { in: ['pending', 'overdue'] }, type: 'customer' },
+      include: { customer: { select: { name: true } } },
+      orderBy: { amount: 'desc' },
+      take: 10,
+    });
+
+    const totalSalesRevenue = await prisma.sale.aggregate({ 
+      _sum: { total: true }, 
+      where: { status: 'completed', paymentMethod: { in: ['cash', 'card', 'bank'] } } 
+    });
+    const balance = (totalSalesRevenue._sum.total || 0) + (allPayments._sum.amount || 0);
+
+    return sendSuccess(reply, {
+      rangeSales: { total: rangeSales._sum.total || 0, count: rangeSales._count },
+      todaySales: { total: todaySales._sum.total || 0, count: todaySales._count },
+      weekSales: { total: weekSales._sum.total || 0, count: weekSales._count },
+      totalCustomers, totalProducts, activeOrders,
+      pendingDebts: { total: pendingDebts._sum.amount || 0, count: pendingDebts._count },
+      lowStockProducts: lowStock,
+      topDebtors,
+      balance: Math.round(balance),
+    });
+  });
+
+  // GET /api/reports/sales?from=&to=
+  fastify.get('/sales', { preHandler: [fastify.authenticate] }, async (request, reply) => {
+    const { from, to, groupBy = 'day' } = request.query;
+    const where = { status: 'completed' };
+    if (from) where.createdAt = { gte: new Date(from) };
+    if (to) where.createdAt = { ...where.createdAt, lte: new Date(to + 'T23:59:59') };
+
+    const sales = await prisma.sale.findMany({
+      where,
+      select: { total: true, discount: true, paymentMethod: true, createdAt: true },
+      orderBy: { createdAt: 'asc' },
+    });
+
+    // Group by day
+    const grouped = {};
+    for (const s of sales) {
+      const key = s.createdAt.toISOString().slice(0, 10);
+      if (!grouped[key]) grouped[key] = { date: key, total: 0, count: 0 };
+      grouped[key].total += s.total;
+      grouped[key].count += 1;
+    }
+
+    const totalRevenue = sales.reduce((s, x) => s + x.total, 0);
+    const byMethod = {};
+    for (const s of sales) {
+      byMethod[s.paymentMethod] = (byMethod[s.paymentMethod] || 0) + s.total;
+    }
+
+    return sendSuccess(reply, {
+      chart: Object.values(grouped),
+      totalRevenue: Math.round(totalRevenue),
+      salesCount: sales.length,
+      byMethod,
+    });
+  });
+
+  // GET /api/reports/top-products
+  fastify.get('/top-products', { preHandler: [fastify.authenticate] }, async (request, reply) => {
+    const { limit = 10 } = request.query;
+    const items = await prisma.saleItem.groupBy({
+      by: ['productId'],
+      _sum: { quantity: true, total: true },
+      orderBy: { _sum: { total: 'desc' } },
+      take: parseInt(limit),
+    });
+    const productIds = items.map(i => i.productId);
+    const products = await prisma.product.findMany({ where: { id: { in: productIds } }, select: { id: true, name: true, sku: true } });
+    const result = items.map(item => {
+      const prod = products.find(p => p.id === item.productId);
+      return { ...prod, totalQty: item._sum.quantity, totalRevenue: Math.round(item._sum.total) };
+    });
+    return sendSuccess(reply, result);
+  });
+
+  // GET /api/reports/profit?from=&to=
+  fastify.get('/profit', { preHandler: [fastify.authenticate] }, async (request, reply) => {
+    const { from, to } = request.query;
+    const where = { status: 'completed' };
+    if (from) where.createdAt = { gte: new Date(from) };
+    if (to) where.createdAt = { ...where.createdAt, lte: new Date(to + 'T23:59:59') };
+
+    const [items, totalExpenses] = await Promise.all([
+      prisma.saleItem.findMany({
+        where: { sale: where },
+        include: { sale: { select: { createdAt: true } } }, // Item dan costPrice olamiz
+      }),
+      prisma.expense.aggregate({
+        where: { date: where.createdAt }, // Savdo davri bilan bir xil vaqtdagi xarajatlar
+        _sum: { amount: true }
+      })
+    ]);
+
+    let revenue = 0, cost = 0;
+    for (const item of items) {
+      revenue += item.total;
+      cost += (item.costPrice || 0) * item.quantity;
+    }
+
+    const expensesAmount = totalExpenses._sum.amount || 0;
+    const grossProfit = revenue - cost;
+    const netProfit = grossProfit - expensesAmount;
+    const margin = revenue > 0 ? Math.round(grossProfit / revenue * 100) : 0;
+
+    return sendSuccess(reply, { 
+      revenue: Math.round(revenue), 
+      cost: Math.round(cost), 
+      grossProfit: Math.round(grossProfit),
+      expenses: Math.round(expensesAmount),
+      netProfit: Math.round(netProfit), 
+      margin 
+    });
+  });
+}
+
+module.exports = reportRoutes;
