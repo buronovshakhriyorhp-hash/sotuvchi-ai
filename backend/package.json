@@ -7,6 +7,7 @@
   "scripts": {
     "dev": "nodemon src/server.js",
     "start": "node src/server.js",
+    "build": "echo \"No build step required for backend; backend runs directly from source.\"",
     "db:push": "npx prisma db push",
     "db:migrate": "npx prisma migrate deploy",
     "db:seed": "node src/seed.js",

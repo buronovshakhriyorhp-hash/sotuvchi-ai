@@ -41,6 +41,12 @@ npm run build
 Backend: `npm run test`
 Frontend: `npm run test:e2e`
 
+## Release va versiya boshqaruvi
+
+- Versiya yangilash: `npm run release`
+- GitHub release workflow `push` qilingan `v*.*.*` taglar bilan avtomatik ishga tushadi.
+- Iltimos, har bir release uchun `CHANGELOG.md` yangilang.
+
 ## Deployment
 
 Docker yoki cloud platformalarda ishga tushirish uchun environment variables ni to'g'ri sozlang.
