@@ -38,6 +38,12 @@ async function saleRoutes(fastify) {
   // GET /api/sales
   fastify.get('/', { preHandler: [fastify.authenticate] }, async (request, reply) => {
     const { page = 1, limit = 50, method, status, from, to } = request.query;
+    const cacheKey = `sales:list:${method || 'all'}:${status || 'all'}:${from || 'all'}:${to || 'all'}:${page}:${limit}`;
+    
+    // Try cache first
+    const cached = await fastify.cache.get(cacheKey);
+    if (cached) return sendSuccess(reply, cached);
+
     const skip = (parseInt(page) - 1) * parseInt(limit);
     const where = {};
     if (method) where.paymentMethod = method;
@@ -51,10 +57,30 @@ async function saleRoutes(fastify) {
     const [sales, total] = await Promise.all([
       prisma.sale.findMany({
         where,
-        include: {
+        select: {
+          id: true,
+          receiptNo: true,
+          cashierId: true,
+          customerId: true,
+          subtotal: true,
+          discount: true,
+          discountAmt: true,
+          total: true,
+          paymentMethod: true,
+          status: true,
+          createdAt: true,
           cashier: { select: { id: true, name: true } },
           customer: { select: { id: true, name: true } },
-          items: { include: { product: { select: { id: true, name: true, sku: true } } } },
+          items: { 
+            select: { 
+              id: true,
+              productId: true,
+              quantity: true,
+              unitPrice: true,
+              total: true,
+              product: { select: { id: true, name: true, sku: true } } 
+            }
+          },
         },
         orderBy: { createdAt: 'desc' },
         skip,
@@ -63,20 +89,37 @@ async function saleRoutes(fastify) {
       prisma.sale.count({ where }),
     ]);
 
-    return sendSuccess(reply, { sales, total, page: parseInt(page), limit: parseInt(limit) });
+    const result = { sales, total, page: parseInt(page), limit: parseInt(limit) };
+    
+    // Cache for 3 minutes (sales list changes frequently)
+    await fastify.cache.set(cacheKey, result, 180);
+    return sendSuccess(reply, result);
   });
 
   // GET /api/sales/:id
   fastify.get('/:id', { preHandler: [fastify.authenticate] }, async (request, reply) => {
+    const cacheKey = `sale:${request.params.id}`;
+    
+    // Try cache first
+    const cached = await fastify.cache.get(cacheKey);
+    if (cached) return sendSuccess(reply, cached);
+
     const sale = await prisma.sale.findUnique({
       where: { id: parseInt(request.params.id) },
       include: {
         cashier: { select: { id: true, name: true } },
-        customer: true,
-        items: { include: { product: true } },
+        customer: { select: { id: true, name: true, phone: true } },
+        items: { 
+          include: { 
+            product: { select: { id: true, name: true, sku: true, sellPrice: true } }
+          }
+        },
       },
     });
     if (!sale) return sendError(reply, 'Sotuv topilmadi', 404);
+    
+    // Cache for 30 minutes (detail page)
+    await fastify.cache.set(cacheKey, sale, 1800);
     return sendSuccess(reply, sale);
   });
 
@@ -84,6 +127,11 @@ async function saleRoutes(fastify) {
   fastify.post('/', { preHandler: [fastify.authenticate], schema: saleSchema }, async (request, reply) => {
     try {
       const sale = await SaleService.createSale(request.body, request.user.id);
+      
+      // Invalidate cache on write
+      await fastify.cache.invalidateEntity('sales');
+      await fastify.cache.invalidateEntity('report');
+      
       return sendSuccess(reply, sale, 201);
     } catch (error) {
       return sendError(reply, error.message, error.statusCode || 400);
@@ -95,6 +143,12 @@ async function saleRoutes(fastify) {
     try {
       const { note } = request.query;
       const result = await SaleService.cancelSale(parseInt(request.params.id), request.user.id, note);
+      
+      // Invalidate cache on delete
+      await fastify.cache.invalidateEntity('sales');
+      await fastify.cache.invalidateEntity('report');
+      await fastify.cache.del(`sale:${request.params.id}`);
+      
       return sendSuccess(reply, 'Sotuv muvaffaqiyatli bekor qilindi');
     } catch (error) {
       return sendError(reply, error.message, error.statusCode || 400);

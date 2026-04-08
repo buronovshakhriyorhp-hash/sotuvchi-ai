@@ -36,8 +36,8 @@ model Product {
   costPrice      Float              @default(0)
   sellPrice      Float              @default(0)
   wholesalePrice Float              @default(0)
-  stock          Float              @default(0)
-  minStock       Float              @default(5)
+  stock          Int                @default(0)
+  minStock       Int                @default(5)
   unit           String             @default("ta")
   packageName    String?
   packageQty     Float?
@@ -59,6 +59,8 @@ model Product {
   @@index([categoryId])
   @@index([isActive])
   @@index([createdAt])
+  @@index([isActive, categoryId])
+  @@index([isActive, stock])
 }
 
 model Attribute {
@@ -187,6 +189,8 @@ model Sale {
   @@index([cashierId])
   @@index([createdAt])
   @@index([status])
+  @@index([status, createdAt])
+  @@index([paymentMethod, createdAt])
 }
 
 model SaleItem {
@@ -245,6 +249,8 @@ model Debt {
   @@index([supplierId])
   @@index([status])
   @@index([dueDate])
+  @@index([type, status])
+  @@index([status, dueDate])
 }
 
 model Payment {
@@ -309,6 +315,8 @@ model Expense {
 
   @@index([category])
   @@index([date])
+  @@index([userId])
+  @@index([category, date])
 }
 
 model RolePermission {

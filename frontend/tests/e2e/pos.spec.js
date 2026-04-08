@@ -15,6 +15,7 @@ test.describe('POS Checkout Flow @regression', () => {
     } catch (error) {
       console.warn('Login failed:', error);
     }
+  });
 
   test('should be able to add an item to the basket and checkout', async ({ page }) => {
     // Navigate to POS

@@ -18,7 +18,7 @@ async function main() {
   console.log(`✅ ${categories.length} ta kategoriya yaratildi`);
 
   // Admin user
-  const adminPassword = process.env.ADMIN_PASSWORD || 'AdminSecure123!';
+  const adminPassword = process.env.ADMIN_PASSWORD || 'Sotuvchi2024!Secure@Admin';
   const adminHash = await bcrypt.hash(adminPassword, 10);
   const admin = await prisma.user.upsert({
     where: { phone: '+998941009122' },

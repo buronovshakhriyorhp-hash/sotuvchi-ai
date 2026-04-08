@@ -1,9 +1,16 @@
 const prisma = require('../prisma');
+const cache = require('../utils/cache');
 const { logAction } = require('./audit.service');
 
 class ProductService {
   async getAllProducts(query) {
     const { search, categoryId, status, page = 1, limit = 50 } = query;
+    const cacheKey = `products:list:${search || 'all'}:${categoryId || 'all'}:${status || 'all'}:${page}:${limit}`;
+    
+    // Try cache first (cache list queries for 5 minutes)
+    const cached = await cache.get(cacheKey);
+    if (cached) return cached;
+
     const skip = (parseInt(page) - 1) * parseInt(limit);
 
     const where = {};
@@ -16,12 +23,26 @@ class ProductService {
     if (status === 'active') where.isActive = true;
     if (status === 'inactive') where.isActive = false;
 
+    // Use select instead of include for better performance
     const [products, total] = await Promise.all([
       prisma.product.findMany({
         where,
-        include: {
+        select: {
+          id: true,
+          sku: true,
+          name: true,
+          categoryId: true,
+          costPrice: true,
+          sellPrice: true,
+          wholesalePrice: true,
+          stock: true,
+          minStock: true,
+          unit: true,
+          barcode: true,
+          image: true,
+          isActive: true,
+          createdAt: true,
           category: { select: { id: true, name: true } },
-          stocks: { include: { warehouse: { select: { id: true, name: true } } } }
         },
         orderBy: { name: 'asc' },
         skip,
@@ -30,15 +51,34 @@ class ProductService {
       prisma.product.count({ where }),
     ]);
 
-    return { products, total, page: parseInt(page), limit: parseInt(limit) };
+    const result = { products, total, page: parseInt(page), limit: parseInt(limit) };
+    
+    // Cache for 5 minutes
+    await cache.set(cacheKey, result, 300);
+    return result;
   }
 
   async getProductById(id) {
+    const cacheKey = `product:${id}`;
+    
+    // Try cache first
+    const cached = await cache.get(cacheKey);
+    if (cached) return cached;
+
     const product = await prisma.product.findUnique({
       where: { id: parseInt(id) },
-      include: { category: true, stocks: { include: { warehouse: true } } },
+      include: { 
+        category: { select: { id: true, name: true } },
+        stocks: { 
+          include: { warehouse: { select: { id: true, name: true } } },
+          select: { id: true, quantity: true, warehouse: true }
+        } 
+      },
     });
     if (!product) throw Object.assign(new Error('Mahsulot topilmadi'), { statusCode: 404 });
+    
+    // Cache for 10 minutes
+    await cache.set(cacheKey, product, 600);
     return product;
   }
 
@@ -82,10 +122,8 @@ class ProductService {
           image: imageUrl,
           isActive: true,
         },
-        include: { category: true },
+        include: { category: { select: { id: true, name: true } } },
       });
-
-
 
       // Stock handling
       let targetWarehouseId = parseInt(warehouseId);
@@ -95,7 +133,6 @@ class ProductService {
       }
 
       if (targetWarehouseId) {
-        // Use separate check and update/create instead of upsert to avoid mysterious corruption
         const existingStock = await tx.productStock.findUnique({
           where: { productId_warehouseId: { productId: product.id, warehouseId: targetWarehouseId } }
         });
@@ -132,6 +169,9 @@ class ProductService {
         entityId: product.id,
         newData: { name: product.name, sku: product.sku, stock: product.stock }
       });
+
+      // Invalidate cache
+      await cache.invalidateEntity('products');
 
       return product;
     });
@@ -175,7 +215,7 @@ class ProductService {
       const product = await tx.product.update({
         where: { id: parseInt(id) },
         data: updateData,
-        include: { category: true },
+        include: { category: { select: { id: true, name: true } } },
       });
 
       // Handle stock adjustments if stock was provided
@@ -187,8 +227,6 @@ class ProductService {
           const defaultWarehouse = await tx.warehouse.findFirst({ where: { isActive: true }, orderBy: { id: 'asc' } });
           if (defaultWarehouse) targetWarehouseId = defaultWarehouse.id;
         }
-
-        console.log('[DEBUG] Target Warehouse ID (Update):', targetWarehouseId);
 
         if (targetWarehouseId) {
           const currentStockRec = await tx.productStock.findUnique({
@@ -244,6 +282,10 @@ class ProductService {
         newData: { name: product.name, sku: product.sku, stock: product.stock }
       });
 
+      // Invalidate cache
+      await cache.invalidateEntity('products');
+      await cache.del(`product:${id}`);
+
       return product;
     });
   }
@@ -265,6 +307,10 @@ class ProductService {
           newData: { isActive: false }
         }
       });
+
+      // Invalidate cache
+      await cache.invalidateEntity('products');
+      await cache.del(`product:${id}`);
 
       return product;
     });

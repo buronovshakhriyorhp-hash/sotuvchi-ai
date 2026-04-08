@@ -77,12 +77,12 @@ export default function usePOS() {
         api.get('/reports/top-products', { params: { limit: 20 } }).catch(() => [])
       ]);
       
-      const products = Array.isArray(prodRes.data) ? prodRes.data : (prodRes.data?.products || []);
-      const cats = Array.isArray(catRes.data) ? catRes.data : (catRes.data?.categories || []);
-      const custs = Array.isArray(custRes.data) ? custRes.data : (custRes.data?.customers || []);
-      const wares = Array.isArray(wareRes.data) ? wareRes.data : (wareRes.data?.warehouses || []);
-      const topResData = (topRes as any).data || topRes;
-      const topProd = Array.isArray(topResData) ? topResData : (topResData?.products || []);
+      const products = Array.isArray(prodRes) ? prodRes : (prodRes?.products || []);
+      const cats = Array.isArray(catRes) ? catRes : (catRes?.categories || []);
+      const custs = Array.isArray(custRes) ? custRes : (custRes?.customers || []);
+      const wares = Array.isArray(wareRes) ? wareRes : (wareRes?.warehouses || []);
+      const topResData = Array.isArray(topRes) ? topRes : (topRes?.products || topRes?.topProducts || topRes || []);
+      const topProd = Array.isArray(topResData) ? topResData : (topResData?.products || topResData?.topProducts || []);
       
       setCatalog(products);
       setCategories(cats);
@@ -208,8 +208,7 @@ export default function usePOS() {
         note: note
       };
       
-      const res = await api.post('/sales', payload);
-      const sale = res.data;
+      const sale = await api.post('/sales', payload);
 
       const customerName = customers.find(c => String(c.id) === String(selectedCustomerId))?.name || 'Chakana mijoz';
       const warehouseName = warehouses.find(w => String(w.id) === String(selectedWarehouseId))?.name || 'Ombor';
@@ -239,7 +238,10 @@ export default function usePOS() {
       setNote('');
       fetchData();
     } catch (err: any) {
-      toast.error(err.response?.data?.error || 'Sotuv amalga oshirilmadi');
+      const message = typeof err === 'string'
+        ? err
+        : err?.response?.data?.error || err?.message || 'Sotuv amalga oshirilmadi';
+      toast.error(message);
     } finally {
       setLoading(false);
     }

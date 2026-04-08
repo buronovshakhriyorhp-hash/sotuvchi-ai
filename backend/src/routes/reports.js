@@ -5,6 +5,12 @@ async function reportRoutes(fastify) {
   // GET /api/reports/dashboard — umumiy statistikalar
   fastify.get('/dashboard', { preHandler: [fastify.authenticate] }, async (request, reply) => {
     const { from, to } = request.query;
+    const cacheKey = `report:dashboard:${from || 'all'}:${to || 'all'}`;
+    
+    // Try cache first
+    let cached = await fastify.cache.get(cacheKey);
+    if (cached) return sendSuccess(reply, cached);
+
     let dateFilter = {};
     
     if (from && to) {
@@ -17,7 +23,8 @@ async function reportRoutes(fastify) {
     const today = new Date(); today.setHours(0,0,0,0);
     const week = new Date(); week.setDate(week.getDate() - 7);
 
-    const [rangeSales, todaySales, weekSales, totalCustomers, totalProducts, activeOrders, pendingDebts, allPayments] = await Promise.all([
+    // Parallel aggregations - MUCH faster
+    const [rangeSales, todaySales, weekSales, totalCustomers, totalProducts, activeOrders, pendingDebts, allPayments, lowStock, topDebtors, totalSalesRevenue] = await Promise.all([
       prisma.sale.aggregate({ _sum: { total: true }, _count: true, where: { createdAt: dateFilter, status: 'completed' } }),
       prisma.sale.aggregate({ _sum: { total: true }, _count: true, where: { createdAt: { gte: today }, status: 'completed' } }),
       prisma.sale.aggregate({ _sum: { total: true }, _count: true, where: { createdAt: { gte: week }, status: 'completed' } }),
@@ -26,28 +33,26 @@ async function reportRoutes(fastify) {
       prisma.order.count({ where: { status: { in: ['new', 'ready'] } } }),
       prisma.debt.aggregate({ _sum: { amount: true }, _count: true, where: { status: { in: ['pending', 'overdue'] } } }),
       prisma.payment.aggregate({ _sum: { amount: true } }),
+      prisma.product.findMany({
+        where: { isActive: true, stock: { lte: 10 } },
+        select: { id: true, name: true, stock: true, minStock: true },
+        take: 10,
+      }),
+      prisma.debt.findMany({
+        where: { status: { in: ['pending', 'overdue'] }, type: 'customer' },
+        include: { customer: { select: { name: true } } },
+        orderBy: { amount: 'desc' },
+        take: 10,
+      }),
+      prisma.sale.aggregate({ 
+        _sum: { total: true }, 
+        where: { status: 'completed', paymentMethod: { in: ['cash', 'card', 'bank'] } } 
+      })
     ]);
 
-    const lowStock = await prisma.product.findMany({
-      where: { isActive: true, stock: { lte: 10 } },
-      select: { id: true, name: true, stock: true, minStock: true },
-      take: 10,
-    });
-
-    const topDebtors = await prisma.debt.findMany({
-      where: { status: { in: ['pending', 'overdue'] }, type: 'customer' },
-      include: { customer: { select: { name: true } } },
-      orderBy: { amount: 'desc' },
-      take: 10,
-    });
-
-    const totalSalesRevenue = await prisma.sale.aggregate({ 
-      _sum: { total: true }, 
-      where: { status: 'completed', paymentMethod: { in: ['cash', 'card', 'bank'] } } 
-    });
     const balance = (totalSalesRevenue._sum.total || 0) + (allPayments._sum.amount || 0);
 
-    return sendSuccess(reply, {
+    const result = {
       rangeSales: { total: rangeSales._sum.total || 0, count: rangeSales._count },
       todaySales: { total: todaySales._sum.total || 0, count: todaySales._count },
       weekSales: { total: weekSales._sum.total || 0, count: weekSales._count },
@@ -56,23 +61,34 @@ async function reportRoutes(fastify) {
       lowStockProducts: lowStock,
       topDebtors,
       balance: Math.round(balance),
-    });
+    };
+
+    // Cache for 5 minutes
+    await fastify.cache.set(cacheKey, result, 300);
+    return sendSuccess(reply, result);
   });
 
   // GET /api/reports/sales?from=&to=
   fastify.get('/sales', { preHandler: [fastify.authenticate] }, async (request, reply) => {
     const { from, to, groupBy = 'day' } = request.query;
+    const cacheKey = `report:sales:${from || 'all'}:${to || 'all'}:${groupBy}`;
+    
+    // Try cache first
+    let cached = await fastify.cache.get(cacheKey);
+    if (cached) return sendSuccess(reply, cached);
+
     const where = { status: 'completed' };
     if (from) where.createdAt = { gte: new Date(from) };
     if (to) where.createdAt = { ...where.createdAt, lte: new Date(to + 'T23:59:59') };
 
+    // Optimized: only select needed fields
     const sales = await prisma.sale.findMany({
       where,
       select: { total: true, discount: true, paymentMethod: true, createdAt: true },
       orderBy: { createdAt: 'asc' },
     });
 
-    // Group by day
+    // Group by day in code (faster than DB for small datasets)
     const grouped = {};
     for (const s of sales) {
       const key = s.createdAt.toISOString().slice(0, 10);
@@ -87,46 +103,80 @@ async function reportRoutes(fastify) {
       byMethod[s.paymentMethod] = (byMethod[s.paymentMethod] || 0) + s.total;
     }
 
-    return sendSuccess(reply, {
+    const result = {
       chart: Object.values(grouped),
       totalRevenue: Math.round(totalRevenue),
       salesCount: sales.length,
       byMethod,
-    });
+    };
+
+    // Cache for 10 minutes
+    await fastify.cache.set(cacheKey, result, 600);
+    return sendSuccess(reply, result);
   });
 
   // GET /api/reports/top-products
   fastify.get('/top-products', { preHandler: [fastify.authenticate] }, async (request, reply) => {
     const { limit = 10 } = request.query;
+    const cacheKey = `report:top-products:${limit}`;
+    
+    // Try cache first
+    let cached = await fastify.cache.get(cacheKey);
+    if (cached) return sendSuccess(reply, cached);
+
+    // Use groupBy aggregate (faster than separate queries)
     const items = await prisma.saleItem.groupBy({
       by: ['productId'],
       _sum: { quantity: true, total: true },
       orderBy: { _sum: { total: 'desc' } },
       take: parseInt(limit),
     });
+    
+    if (items.length === 0) {
+      return sendSuccess(reply, []);
+    }
+
     const productIds = items.map(i => i.productId);
-    const products = await prisma.product.findMany({ where: { id: { in: productIds } }, select: { id: true, name: true, sku: true } });
+    const products = await prisma.product.findMany({ 
+      where: { id: { in: productIds } }, 
+      select: { id: true, name: true, sku: true }
+    });
+
     const result = items.map(item => {
       const prod = products.find(p => p.id === item.productId);
       return { ...prod, totalQty: item._sum.quantity, totalRevenue: Math.round(item._sum.total) };
     });
+
+    // Cache for 30 minutes
+    await fastify.cache.set(cacheKey, result, 1800);
     return sendSuccess(reply, result);
   });
 
   // GET /api/reports/profit?from=&to=
   fastify.get('/profit', { preHandler: [fastify.authenticate] }, async (request, reply) => {
     const { from, to } = request.query;
+    const cacheKey = `report:profit:${from || 'all'}:${to || 'all'}`;
+    
+    // Try cache first
+    let cached = await fastify.cache.get(cacheKey);
+    if (cached) return sendSuccess(reply, cached);
+
     const where = { status: 'completed' };
     if (from) where.createdAt = { gte: new Date(from) };
     if (to) where.createdAt = { ...where.createdAt, lte: new Date(to + 'T23:59:59') };
 
+    // Optimized: fetch only needed fields
     const [items, totalExpenses] = await Promise.all([
       prisma.saleItem.findMany({
         where: { sale: where },
-        include: { sale: { select: { createdAt: true } } }, // Item dan costPrice olamiz
+        select: {
+          total: true,
+          quantity: true,
+          costPrice: true,
+        }
       }),
       prisma.expense.aggregate({
-        where: { date: where.createdAt }, // Savdo davri bilan bir xil vaqtdagi xarajatlar
+        where: { createdAt: where.createdAt }, 
         _sum: { amount: true }
       })
     ]);
@@ -142,14 +192,18 @@ async function reportRoutes(fastify) {
     const netProfit = grossProfit - expensesAmount;
     const margin = revenue > 0 ? Math.round(grossProfit / revenue * 100) : 0;
 
-    return sendSuccess(reply, { 
+    const result = { 
       revenue: Math.round(revenue), 
       cost: Math.round(cost), 
       grossProfit: Math.round(grossProfit),
       expenses: Math.round(expensesAmount),
       netProfit: Math.round(netProfit), 
       margin 
-    });
+    };
+
+    // Cache for 30 minutes
+    await fastify.cache.set(cacheKey, result, 1800);
+    return sendSuccess(reply, result);
   });
 }
 

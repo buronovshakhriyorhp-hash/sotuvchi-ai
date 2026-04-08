@@ -9,6 +9,8 @@ const rateLimit = require('@fastify/rate-limit');
 const path = require('path');
 require('dotenv').config();
 
+const cache = require('./utils/cache');
+
 const authRoutes = require('./routes/auth');
 const productRoutes = require('./routes/products');
 const categoryRoutes = require('./routes/categories');
@@ -32,17 +34,21 @@ function buildApp() {
   const app = Fastify({
     logger: process.env.NODE_ENV !== 'production' ? {
       transport: { target: 'pino-pretty', options: { colorize: true } }
-    } : true
+    } : false
   });
+
+  // Initialize cache
+  app.decorate('cache', cache);
 
   // Security headers
   app.register(helmet, {
     contentSecurityPolicy: process.env.NODE_ENV === 'production',
   });
 
-  // Rate limiting (100 requests per minute per IP)
+  // Rate limiting (adaptive based on environment)
+  const rateMax = process.env.NODE_ENV === 'production' ? 1000 : 500;
   app.register(rateLimit, {
-    max: 100,
+    max: rateMax,
     timeWindow: '1 minute'
   });
 
@@ -52,7 +58,10 @@ function buildApp() {
     credentials: true,
   });
 
-  app.register(compress, { global: true });
+  app.register(compress, { 
+    global: true,
+    threshold: 1024 // Only compress responses > 1KB
+  });
 
   // Multipart for file uploads (limit 10MB)
   app.register(multipart, {
@@ -63,7 +72,8 @@ function buildApp() {
   app.register(staticFiles, {
     root: path.join(__dirname, '../uploads'),
     prefix: '/uploads/',
-    decorateReply: false
+    decorateReply: false,
+    constraints: {}
   });
 
   app.register(jwt, {
@@ -81,7 +91,7 @@ function buildApp() {
   });
 
   // Health check
-  app.get('/api/health', async () => ({ status: 'ok', time: new Date().toISOString() }));
+  app.get('/api/health', async () => ({ status: 'ok', time: new Date().toISOString(), cache: cache.connected }));
 
   // Routes
   app.register(authRoutes,      { prefix: '/api/auth' });

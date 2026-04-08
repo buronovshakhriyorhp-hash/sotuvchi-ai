@@ -1,12 +1,12 @@
 # Frontend Dockerfile
-FROM node:18-alpine as build
+FROM node:20-alpine as build
 
 WORKDIR /app
 
-COPY frontend/package*.json ./
-RUN npm ci
+COPY package*.json ./
+RUN npm install
 
-COPY frontend/ ./
+COPY . ./
 RUN npm run build
 
 # Production stage

@@ -1,6 +1,7 @@
 require('dotenv').config();
 const buildApp = require('./app');
 const prisma = require('./prisma');
+const cache = require('./utils/cache');
 
 // Env validation
 const requiredEnv = ['DATABASE_URL', 'JWT_SECRET'];
@@ -14,13 +15,17 @@ if (missingEnv.length > 0) {
 const start = async () => {
   const app = buildApp();
   
+  // Initialize Redis Cache
+  await cache.connect();
+  
   // Graceful Shutdown logic
   const closeServer = async (signal) => {
     console.log(`\nReceived ${signal}. Closing server...`);
     try {
+      await cache.disconnect();
       await app.close();
       await prisma.$disconnect();
-      console.log('✅ Server and Database disconnected safely.');
+      console.log('✅ Server, Cache and Database disconnected safely.');
       process.exit(0);
     } catch (err) {
       console.error('Error during shutdown:', err);
@@ -44,7 +49,8 @@ const start = async () => {
     const port = parseInt(process.env.PORT) || 5000;
     await app.listen({ port, host: '0.0.0.0' });
     console.log(`\n🚀 Nexus ERP Backend: http://0.0.0.0:${port}`);
-    console.log(`📊 Health check: http://0.0.0.0:${port}/api/health\n`);
+    console.log(`📊 Health check: http://0.0.0.0:${port}/api/health`);
+    console.log(`💾 Cache: ${cache.connected ? '✅ ACTIVE' : '⚠️ DISABLED'}\n`);
   } catch (err) {
     app.log.error(err);
     process.exit(1);

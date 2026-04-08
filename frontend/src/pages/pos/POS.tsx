@@ -165,14 +165,16 @@ export default function POS() {
                 const fd = new FormData(e.target as HTMLFormElement);
                 const data = Object.fromEntries(fd.entries());
                 try {
-                  const res = await api.post('/customers', data);
-                  const newCustomer = res.data;
+                  const newCustomer = await api.post('/customers', data);
                   setCustomers((p: any) => [...p, newCustomer]);
                   setSelectedCustomerId(String(newCustomer.id));
                   setShowAddCustomer(false);
                   toast.success("Mijoz muvaffaqiyatli qo'shildi");
                 } catch (err: any) {
-                  toast.error(err.response?.data?.error || "Mijoz qo'shib bo'lmadi");
+                  const message = typeof err === 'string'
+                    ? err
+                    : err?.response?.data?.error || err?.message || "Mijoz qo'shib bo'lmadi";
+                  toast.error(message);
                 }
               }}>
                 <div className="form-group">
