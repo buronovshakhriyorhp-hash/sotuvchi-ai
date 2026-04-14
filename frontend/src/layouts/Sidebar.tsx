@@ -169,7 +169,11 @@ function SidebarItem({ item, isOpen, toggleOpen, closeSidebar }: SidebarItemProp
 export default function Sidebar({ isOpen, closeSidebar }: { isOpen: boolean; closeSidebar: () => void }) {
   const [openMenus, setOpenMenus] = useState<Record<string, boolean>>({});
   const toggle = (title: string) => setOpenMenus(prev => ({ ...prev, [title]: !prev[title] }));
-  const { logout } = useAuth();
+  const { logout, user } = useAuth();
+
+  const currentMenu = React.useMemo(() => {
+    return [...MENU];
+  }, []);
 
   return (
     <aside className={`sidebar${isOpen ? ' open' : ''}`}>
@@ -181,7 +185,7 @@ export default function Sidebar({ isOpen, closeSidebar }: { isOpen: boolean; clo
         </a>
       </div>
       <div className="sidebar-content">
-        {MENU.map((section, si) => (
+        {currentMenu.map((section, si) => (
           <div key={si}>
             <div className="sidebar-section-label">{section.section}</div>
             {section.items.map((item, ii) => (

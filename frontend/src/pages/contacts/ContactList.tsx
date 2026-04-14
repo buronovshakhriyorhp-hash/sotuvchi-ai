@@ -1,23 +1,37 @@
 import React, { useState, useEffect } from 'react';
 import { User, Phone, Mail, MapPin, Search, Plus, Edit2, Trash2 } from 'lucide-react';
 import api from '../../api/axios';
+import { Customer, Supplier } from '../../types';
 
-export default function ContactList({ type = 'customer' }) {
-  const [contacts, setContacts] = useState([]);
+interface Contact {
+  id: number | string;
+  name: string;
+  phone?: string;
+  email?: string;
+  address?: string;
+}
+
+interface ContactListProps {
+  type?: 'customer' | 'supplier';
+}
+
+export default function ContactList({ type = 'customer' }: ContactListProps) {
+  const [contacts, setContacts] = useState<Contact[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
 
-  const fetchContacts = async () => {
+  const fetchContacts = React.useCallback(async () => {
     try {
       const endpoint = type === 'customer' ? '/customers' : '/suppliers';
-      const res = await api.get(endpoint, { params: { limit: 1000 } });
-      setContacts(res.customers || res || []);
+      const res = await api.get<any>(endpoint, { params: { limit: 1000 } });
+      setContacts(res.customers || res.suppliers || res.data || res || []);
     } catch (err) { console.error(err); }
     setLoading(false);
-  };
+  }, [type]);
 
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-useEffect(() => { setTimeout(fetchContacts, 0); }, [type, fetchContacts]);
+  useEffect(() => {
+    fetchContacts();
+  }, [fetchContacts]);
 
   const filtered = contacts.filter(c => 
     c.name.toLowerCase().includes(search.toLowerCase()) || 

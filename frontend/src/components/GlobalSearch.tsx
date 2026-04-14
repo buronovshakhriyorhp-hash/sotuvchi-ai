@@ -17,19 +17,30 @@ const SEARCH_DATA = [
   { type:'Buyurtma',  icon: ShoppingCart,label:'ORD-002 — Zarina R.',          path:'/products/orders' },
 ];
 
-const TYPE_COLORS = {
+const TYPE_COLORS: Record<string, { bg: string; color: string }> = {
   'Sahifa':   { bg:'#e0f2fe', color:'#0284c7' },
   'Mahsulot': { bg:'#fef3c7', color:'#d97706' },
   'Mijoz':    { bg:'#dcfce7', color:'#16a34a' },
   'Buyurtma': { bg:'#f3e8ff', color:'#9333ea' },
 };
 
-export default function GlobalSearch({ onClose }) {
+interface SearchResult {
+  type: string;
+  icon: any;
+  label: string;
+  path: string;
+}
+
+interface GlobalSearchProps {
+  onClose: () => void;
+}
+
+export default function GlobalSearch({ onClose }: GlobalSearchProps) {
   const [query, setQuery] = useState('');
-  const [results, setResults] = useState([]);
+  const [results, setResults] = useState<SearchResult[]>([]);
   
   const [selected, setSelected] = useState(0);
-  const inputRef = useRef(null);
+  const inputRef = useRef<HTMLInputElement>(null);
   const navigate = useNavigate();
 
   useEffect(() => { inputRef.current?.focus(); }, []);
@@ -42,7 +53,7 @@ export default function GlobalSearch({ onClose }) {
     const delay = setTimeout(async () => {
       
       try {
-        const res = await api.get('/search', { params: { q: query } });
+        const res = await api.get<SearchResult[]>('/search', { params: { q: query } });
         setResults([...SEARCH_DATA.filter(d => d.type === 'Sahifa' && d.label.toLowerCase().includes(query.toLowerCase())), ...res]);
       } catch (e) { console.error(e); }
       
@@ -50,9 +61,9 @@ export default function GlobalSearch({ onClose }) {
     return () => clearTimeout(delay);
   }, [query]);
 
-  const go = (path) => { navigate(path); onClose(); };
+  const go = (path: string) => { navigate(path); onClose(); };
 
-  const handleKey = (e) => {
+  const handleKey = (e: React.KeyboardEvent) => {
     if (e.key === 'ArrowDown') { e.preventDefault(); setSelected(s => Math.min(s+1, results.length-1)); }
     if (e.key === 'ArrowUp')   { e.preventDefault(); setSelected(s => Math.max(s-1, 0)); }
     if (e.key === 'Enter' && results[selected]) go(results[selected].path);

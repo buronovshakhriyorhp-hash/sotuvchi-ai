@@ -2,7 +2,7 @@ import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react-swc';
 import path from 'path';
 import compression from 'vite-plugin-compression';
-// import { VitePWA } from 'vite-plugin-pwa';
+import { VitePWA } from 'vite-plugin-pwa';
 
 // https://vite.dev/config/
 export default defineConfig({
@@ -16,57 +16,59 @@ export default defineConfig({
       algorithm: 'brotliCompress',
       ext: '.br',
     }),
-    // VitePWA({
-    //   registerType: 'autoUpdate',
-    //   injectRegister: 'auto',
-    //   manifest: {
-    //     name: 'Sotuvchi POS',
-    //     short_name: 'Sotuvchi',
-    //     description: 'Offline-ready POS for small retail businesses.',
-    //     theme_color: '#1d4ed8',
-    //     background_color: '#ffffff',
-    //     display: 'standalone',
-    //     start_url: '/',
-    //     icons: [
-    //       {
-    //         src: 'pwa-192x192.png',
-    //         sizes: '192x192',
-    //         type: 'image/png'
-    //       },
-    //       {
-    //         src: 'pwa-512x512.png',
-    //         sizes: '512x512',
-    //         type: 'image/png'
-    //       }
-    //     ]
-    //   },
-    //   workbox: {
-    //     runtimeCaching: [
-    //       {
-    //         urlPattern: /\/api\//,
-    //         handler: 'NetworkFirst',
-    //         options: {
-    //           cacheName: 'api-cache',
-    //           expiration: {
-    //             maxEntries: 50,
-    //             maxAgeSeconds: 60 * 60 * 24
-    //           }
-    //         }
-    //       },
-    //       {
-    //         urlPattern: /\/_app\//,
-    //         handler: 'StaleWhileRevalidate',
-    //         options: {
-    //           cacheName: 'asset-cache',
-    //           expiration: {
-    //             maxEntries: 100,
-    //             maxAgeSeconds: 60 * 60 * 24 * 30
-    //           }
-    //         }
-    //       }
-    //     ]
-    //   }
-    // })
+    VitePWA({
+      registerType: 'autoUpdate',
+      injectRegister: 'auto',
+      manifest: {
+        name: 'Nexus ERP POS',
+        short_name: 'Nexus ERP',
+        description: 'Offline-ready POS system for Nexus ERP.',
+        theme_color: '#3b82f6',
+        background_color: '#ffffff',
+        display: 'standalone',
+        start_url: '/',
+        icons: [
+          {
+            src: 'pwa-192x192.png',
+            sizes: '192x192',
+            type: 'image/png'
+          },
+          {
+            src: 'pwa-512x512.png',
+            sizes: '512x512',
+            type: 'image/png'
+          }
+        ]
+      },
+      workbox: {
+        globPatterns: ['**/*.{js,css,html,ico,png,svg,woff,woff2}'],
+        runtimeCaching: [
+          {
+            urlPattern: /^\/api\/.*$/,
+            handler: 'NetworkFirst',
+            options: {
+              cacheName: 'api-cache',
+              expiration: {
+                maxEntries: 100,
+                maxAgeSeconds: 24 * 60 * 60 // 24 hours
+              },
+              networkTimeoutSeconds: 5
+            }
+          },
+          {
+            urlPattern: /https:\/\/fonts\.googleapis\.com\/.*/,
+            handler: 'CacheFirst',
+            options: {
+              cacheName: 'google-fonts-cache',
+              expiration: {
+                maxEntries: 10,
+                maxAgeSeconds: 365 * 24 * 60 * 60 // 1 year
+              }
+            }
+          }
+        ]
+      }
+    })
   ],
   resolve: {
     alias: {

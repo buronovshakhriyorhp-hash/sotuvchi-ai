@@ -22,22 +22,119 @@ export default function POS() {
     handleSell, setMethod, catalog, total
   } = pos;
 
-  // Global Hotkeys removed as requested
+  // Dynamic Hotkeys and Barcode scanner
   React.useEffect(() => {
+    let barcodeString = '';
+    let barcodeTimeout: any = null;
+
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Allow Escape to close modal
-      if (e.key === 'Escape' && showCheckout) {
-        setShowCheckout(false);
+      // 0. Smart Focus: If user starts typing and not in an input/textarea/modal, focus searchRef
+      const target = e.target as HTMLElement;
+      const isInput = target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable;
+      const isInModal = !!document.querySelector('.modal-overlay');
+
+      if (!isInput && !isInModal && e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        searchRef.current?.focus();
       }
-      // Keep search shortcut (Ctrl+F)
-      if ((e.ctrlKey || e.metaKey) && e.key === 'f') {
+
+      // 1. Barcode scanner listener
+      if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        barcodeString += e.key;
+        if (barcodeTimeout) clearTimeout(barcodeTimeout);
+        // Wait 200ms for next character (safer for various scanners and system load)
+        barcodeTimeout = setTimeout(() => { barcodeString = ''; }, 200);
+      } else if (e.key === 'Enter' && barcodeString.length >= 3) {
+        e.preventDefault();
+        const p = catalog.find((x: any) => x.sku === barcodeString || x.barcode === barcodeString || x.id.toString() === barcodeString);
+        if (p) {
+           pos.addToCart(p);
+           toast.success(`${p.name} savatga qo'shildi`);
+        } else {
+           toast.error(`Mahsulot topilmadi: ${barcodeString}`);
+        }
+        barcodeString = '';
+      }
+
+      // 2. Modals close
+      if (e.key === 'Escape') {
+        if (showCheckout) setShowCheckout(false);
+        if (showAddCustomer) setShowAddCustomer(false);
+        if (success) setSuccess(false);
+      }
+
+      // Helper function to check combo
+      const checkCombo = (e: KeyboardEvent, comboStr: string) => {
+        if (!comboStr) return false;
+        const parts = comboStr.split(' + ');
+        const needsCtrl = parts.includes('Ctrl') || parts.includes('Control');
+        const needsAlt = parts.includes('Alt');
+        const needsShift = parts.includes('Shift');
+        const needsCmd = parts.includes('Cmd') || parts.includes('Meta');
+        
+        if (e.ctrlKey !== needsCtrl) return false;
+        if (e.altKey !== needsAlt) return false;
+        if (e.shiftKey !== needsShift) return false;
+        if (e.metaKey !== needsCmd) return false;
+
+        const mainKey = parts.find(p => !['Ctrl', 'Alt', 'Shift', 'Cmd', 'Control', 'Meta'].includes(p));
+        if (mainKey) {
+          const k = e.key === ' ' ? 'Space' : e.key.length === 1 ? e.key.toUpperCase() : e.key;
+          if (k !== mainKey) return false;
+        }
+        return true;
+      };
+
+      // 3. Admin Defined Hotkeys
+      const checkoutKey = localStorage.getItem('pos_hotkey_checkout') || 'F2';
+      const addCustKey = localStorage.getItem('pos_hotkey_addcustomer') || 'F4';
+      const searchKey = localStorage.getItem('pos_hotkey_search') || 'Ctrl + F';
+      const clearCartKey = localStorage.getItem('pos_hotkey_clearcart') || 'Ctrl + Delete';
+      const printPdfKey = localStorage.getItem('pos_hotkey_printpdf') || 'Ctrl + P';
+      const printThermalKey = localStorage.getItem('pos_hotkey_printthermal') || 'Ctrl + T';
+
+      if (checkCombo(e, checkoutKey) && !showAddCustomer && !success && !showCheckout) {
+        e.preventDefault();
+        if (cart.length > 0) {
+          setShowCheckout(true);
+        } else {
+          toast.warning("Sotuvni yakunlash uchun avval mahsulot tanlang!");
+        }
+      }
+      
+      if (checkCombo(e, addCustKey) && !showCheckout && !success && !showAddCustomer) {
+        e.preventDefault();
+        setShowAddCustomer(true);
+      }
+
+      if (checkCombo(e, searchKey) && !showCheckout && !success && !showAddCustomer) {
         e.preventDefault();
         searchRef.current?.focus();
+      }
+
+      if (checkCombo(e, clearCartKey) && !showCheckout && !success && !showAddCustomer) {
+        e.preventDefault();
+        if (cart.length > 0) {
+           pos.setCart([]);
+           toast.info("Savat tozalandi");
+        }
+      }
+
+      if (success) {
+        if (checkCombo(e, printPdfKey)) {
+          e.preventDefault();
+          setPrintType('pdf');
+          setTimeout(() => window.print(), 100);
+        }
+        if (checkCombo(e, printThermalKey)) {
+          e.preventDefault();
+          setPrintType('thermal');
+          toast.info("Termal printerga yuborilmoqda...");
+        }
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [showCheckout]);
+  }, [showCheckout, showAddCustomer, success, cart.length, catalog, handleSell, toast]);
 
   // Focus management
   React.useEffect(() => {
@@ -47,63 +144,75 @@ export default function POS() {
   }, [success, showAddCustomer, showCheckout, cart.length]);
 
   return (
-    <div className="fade-in pos-container" style={{ 
-      display: 'flex', flexDirection: 'column', height: '100%', gap: '1.5rem', 
-      padding: '1.5rem', background: 'var(--bg)', overflow: 'hidden' 
-    }}>
+    <div className="fade-in pos-container" style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - var(--navbar-height))', gap: '1rem', padding: '1rem' }}>
 
       {/* HEADER */}
-      <div style={{ 
-        display: 'flex', justifyContent: 'space-between', alignItems: 'center', 
-        background: 'var(--surface)', padding: '1.25rem 2rem', borderRadius: '24px', 
-        boxShadow: 'var(--shadow-md)', border: '1px solid var(--border)', flexShrink: 0
+      <div className="glass-panel" style={{ 
+        padding: '1rem', 
+        display: 'flex', 
+        justifyContent: 'space-between', 
+        alignItems: 'center',
+        background: 'var(--surface)',
+        borderRadius: 'var(--radius-xl)',
+        boxShadow: 'var(--shadow-lg)',
+        border: '1px solid var(--border)',
+        flexWrap: 'wrap',
+        gap: '1rem'
       }}>
-        <div>
-          <h1 style={{ fontSize: '1.5rem', fontWeight: 800, margin: 0, color: 'var(--text)' }}>Sotuv bo'limi</h1>
-          <p style={{ margin: '4px 0 0 0', color: 'var(--text-muted)', fontSize: '0.875rem' }}>Bazada jami {catalog.length} ta mahsulot mavjud</p>
+        <div className="pos-title-area">
+          <h1 style={{ fontSize: '1.5rem', fontWeight: 900, color: 'var(--text)', letterSpacing: '-0.02em' }}>Sotuv bo'limi</h1>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: '0.25rem' }}>
+            <span style={{ fontSize: '0.8125rem', color: 'var(--text-muted)' }}>Bazada {catalog.length} xil mahsulot</span>
+            <div style={{ width: 4, height: 4, borderRadius: '50%', background: 'var(--border-strong)' }}></div>
+            <span style={{ fontSize: '0.8125rem', color: 'var(--success)', fontWeight: 700 }}>Online</span>
+          </div>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem' }}>
-          <div style={{ textAlign: 'right' }}>
-            <div style={{ fontSize: '0.875rem', color: 'var(--text-muted)', marginBottom: '4px', fontWeight: 600 }}>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
+          <div className="pos-total-display" style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
+            <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase' }}>
               Jami ({cart.reduce((s,i) => s + i.qty, 0)} dona):
             </div>
-            <div style={{ fontSize: '1.375rem', fontWeight: 900, color: 'var(--primary)' }}>
+            <div style={{ fontSize: '1.75rem', fontWeight: 900, color: 'var(--primary-deep)', lineHeight: 1 }}>
               {format(total)}
             </div>
           </div>
+          
           <button 
-            className="btn btn-primary" 
+            className={`btn btn-lg ${cart.length > 0 ? 'btn-primary' : 'btn-outline'}`} 
+            style={{ 
+              height: '56px', 
+              padding: '0 2rem', 
+              borderRadius: 'var(--radius-lg)', 
+              fontSize: '1rem', 
+              fontWeight: 800,
+              boxShadow: cart.length > 0 ? '0 8px 16px -4px rgba(245, 158, 11, 0.4)' : 'none'
+            }}
             onClick={() => {
               if (cart.length === 0) {
                 toast.warning("Sotuvni yakunlash uchun avval mahsulot tanlang!");
                 return;
               }
               setShowCheckout(true);
-            }} 
-            style={{ 
-              padding: '1rem 1.5rem', fontSize: '1.125rem', fontWeight: 700, borderRadius: '16px',
-              display: 'flex', alignItems: 'center', gap: '0.5rem',
-              boxShadow: cart.length > 0 ? '0 4px 14px 0 var(--primary)' : 'none',
-              cursor: 'pointer'
             }}
           >
-            <Wallet size={22} /> Mijoz to'lovi
+            <Wallet size={20} /> To'lovga o'tish
           </button>
         </div>
       </div>
 
       {/* MAIN BODY */}
-      <div style={{ display: 'flex', gap: '1.5rem', flex: 1, minHeight: 0 }}>
+      <div className="pos-body-grid">
         {/* LEFT: Product Grid (Flexible) */}
-        <div style={{ flex: '1 1 auto', minWidth: 0, height: '100%', display: activeTab === 'cart' ? 'none' : 'block' }}>
+        <div className={`pos-products-area ${activeTab === 'cart' ? 'mobile-hidden' : ''}`}>
           <POSProductGrid 
             {...pos} 
             searchRef={searchRef}
           />
         </div>
         
-        {/* RIGHT: Compact Cart (Fixed width 360px) */}
-        <div style={{ width: '360px', flexShrink: 0, height: '100%', display: activeTab === 'products' && window.innerWidth < 1024 ? 'none' : 'block' }} className="pos-selected-items-wrapper">
+        {/* RIGHT: Compact Cart */}
+        <div className={`pos-cart-area ${activeTab === 'products' ? 'mobile-hidden' : ''}`}>
           <POSSelectedItems {...pos} />
         </div>
       </div>
@@ -153,7 +262,7 @@ export default function POS() {
 
       {/* ADD CUSTOMER MODAL */}
       {showAddCustomer && (
-        <div className="modal-overlay" onClick={() => setShowAddCustomer(false)}>
+        <div className="modal-overlay" style={{ zIndex: 1050 }} onClick={() => setShowAddCustomer(false)}>
           <div className="modal-content modal-sm" onClick={e => e.stopPropagation()}>
             <div className="modal-header">
               <h2 className="modal-title">Yangi mijoz qo'shish</h2>
@@ -201,7 +310,7 @@ export default function POS() {
 
       {/* SUCCESS MODAL */}
       {success && receiptData && (
-        <div className="modal-overlay" onClick={() => setSuccess(false)}>
+        <div className="modal-overlay" style={{ zIndex: 1050 }} onClick={() => setSuccess(false)}>
           <div className="modal-content modal-sm" onClick={e => e.stopPropagation()}>
             <div className="modal-body" style={{ textAlign:'center' }}>
               <div style={{ width:64, height:64, background:'var(--success-bg)', borderRadius:'50%', display:'flex', alignItems:'center', justifyContent:'center', margin:'0 auto 1rem' }}>

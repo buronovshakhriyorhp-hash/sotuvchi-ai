@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useNavigate, Link } from 'react-router-dom';
 import useAuth from '../store/useAuth';
 
 export default function Login() {
@@ -7,15 +8,26 @@ export default function Login() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const login = useAuth(s => s.login);
+  const navigate = useNavigate();
 
-  const handleSubmit = async (e) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     setLoading(true);
     try {
       await login(phone, password);
-    } catch (err) {
-      setError(err);
+      // Wait for state to update or check the return value
+      const storedUser = JSON.parse(localStorage.getItem('user') || '{}');
+      
+      if (storedUser.role === 'SUPERADMIN') {
+        navigate('/gumsmass_645_super_admin_panel');
+      } else if (storedUser.role === 'CASHIER') {
+        navigate('/pos');
+      } else {
+        navigate('/');
+      }
+    } catch (err: any) {
+      setError(typeof err === 'string' ? err : err?.message || 'Kirishda xatolik');
     } finally {
       setLoading(false);
     }
@@ -45,8 +57,11 @@ export default function Login() {
           </button>
         </form>
 
-        <div style={{ textAlign:'center', marginTop:'1.5rem', fontSize:'0.8rem', color:'var(--text-muted)' }}>
-          <div>Demo uchun admin credentials: +998941009122 / [parolni seed.js dan ko'ring]</div>
+        <div style={{ textAlign:'center', marginTop:'1.5rem', fontSize:'0.85rem', color:'var(--text-muted)' }}>
+          Hisobingiz yo'qmi?{' '}
+          <Link to="/register" style={{ color:'var(--primary)', fontWeight:600, textDecoration:'none' }}>
+            Ro'yxatdan o'tish
+          </Link>
         </div>
       </div>
     </div>

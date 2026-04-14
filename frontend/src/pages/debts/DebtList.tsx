@@ -3,6 +3,32 @@ import { AlertCircle, CheckCircle2, Clock, Plus, PhoneCall, Search } from 'lucid
 import api from '../../api/axios';
 import useCurrency from '../../store/useCurrency';
 import useToast from '../../store/useToast';
+import { Customer, Supplier } from '../../types';
+import NewDebtModal from '../../components/NewDebtModal';
+import DebtPaymentModal from '../../components/DebtPaymentModal';
+import DebtHistoryModal from '../../components/DebtHistoryModal';
+
+interface Debt {
+  id: number | string;
+  type: 'customer' | 'supplier';
+  customerId?: number;
+  supplierId?: number;
+  customer?: Customer;
+  supplier?: Supplier;
+  amount: number;
+  paidAmount: number;
+  remaining: number;
+  dueDate: string;
+  status: 'pending' | 'partial' | 'paid';
+  isOverdue: boolean;
+  createdAt: string;
+}
+
+interface DebtSummary {
+  totalPending: number;
+  overdueCount: number;
+  paidCount: number;
+}
 
 export default function DebtList() {
   const toast = useToast();
@@ -10,9 +36,13 @@ export default function DebtList() {
 
   const [search, setSearch] = useState('');
   const [typeFilter, setTypeFilter] = useState('all');
-  const [debts, setDebts] = useState([]);
-  const [summary, setSummary] = useState({ totalPending: 0, overdueCount: 0, paidCount: 0 });
+  const [debts, setDebts] = useState<Debt[]>([]);
+  const [summary, setSummary] = useState<DebtSummary>({ totalPending: 0, overdueCount: 0, paidCount: 0 });
   const [loading, setLoading] = useState(true);
+  const [showModal, setShowModal] = useState(false);
+  const [editDebt, setEditDebt] = useState<Debt | null>(null);
+  const [payDebt, setPayDebt] = useState<Debt | null>(null);
+  const [historyDebt, setHistoryDebt] = useState<Debt | null>(null);
 
   useEffect(() => {
     fetchDebts();
@@ -22,8 +52,8 @@ export default function DebtList() {
     setLoading(true);
     try {
       const [debtRes, sumRes] = await Promise.all([
-        api.get('/debts', { params: { type: typeFilter === 'all' ? undefined : typeFilter } }),
-        api.get('/debts/summary').catch(() => null),
+        api.get<any>('/debts', { params: { type: typeFilter === 'all' ? undefined : typeFilter } }),
+        api.get<any>('/debts/summary').catch(() => null),
       ]);
       const list = Array.isArray(debtRes) ? debtRes : (debtRes?.debts || debtRes?.data || []);
       setDebts(list);
@@ -42,20 +72,10 @@ export default function DebtList() {
     return matchSearch;
   });
 
-  const markPaid = async (id, remaining) => {
-    const confirm = window.confirm('Rostdan ham to\'liq to\'landimi?');
-    if (!confirm) return;
-    try {
-      await api.post(`/debts/${id}/pay`, { amount: remaining, method: 'cash' });
-      toast.success("To'lov muvaffaqiyatli qabul qilindi");
-      fetchDebts();
-    } catch {
-      toast.error("Xatolik yuz berdi");
-    }
-  };
+  // markPaid and prompt removed, handled by DebtPaymentModal now
 
 
-  const statusBadge = (d) => {
+  const statusBadge = (d: Debt) => {
     if (d.status === 'paid')    return <span className="badge badge-active"><CheckCircle2 size={10}/> To'landi</span>;
     if (d.isOverdue)            return <span className="badge badge-danger"><AlertCircle size={10}/> Muddati o'tgan</span>;
     if (d.status === 'partial') return <span className="badge badge-info"><Clock size={10}/> Qisman</span>;
@@ -69,7 +89,7 @@ export default function DebtList() {
           <h1 className="page-title">Qarzlar boshqaruvi</h1>
           <p className="page-subtitle">Mijozlar va yetkazuvchilar qarzi</p>
         </div>
-        <button className="btn btn-primary" onClick={() => toast.info("Yangi qarz qo'shish modali tez orada qo'shiladi")} style={{ display:'flex', alignItems:'center', gap:'0.4rem' }}><Plus size={16}/> Yangi qarz</button>
+        <button className="btn btn-primary" onClick={() => { setEditDebt(null); setShowModal(true); }} style={{ display:'flex', alignItems:'center', gap:'0.4rem' }}><Plus size={16}/> Yangi qarz</button>
       </div>
 
       {/* Summary */}
@@ -111,8 +131,8 @@ export default function DebtList() {
           </div>
         </div>
 
-        <div className="table-wrapper" style={{ border:'none', borderRadius:0 }}>
-          <table className="table">
+        <div className="table-wrapper" style={{ border:'none', borderRadius:0, overflowX: 'auto' }}>
+          <table className="table" style={{ width: '100%', minWidth: '800px' }}>
             <thead>
               <tr>
                 <th>ID</th><th>Ism</th><th>Turi</th><th>Telefon</th>
@@ -145,12 +165,18 @@ export default function DebtList() {
                     {new Date(d.dueDate).toLocaleDateString('uz-UZ')}
                   </td>
                   <td>{statusBadge(d)}</td>
-                  <td style={{ textAlign:'right' }}>
+                  <td style={{ textAlign:'right', display:'flex', gap:'0.3rem', justifyContent:'flex-end' }}>
+                    <button onClick={() => setHistoryDebt(d)} className="btn btn-outline btn-sm" style={{ color:'var(--primary)' }}>
+                      Tarix & Izohlar
+                    </button>
                     {d.status !== 'paid' && (
-                      <button onClick={() => markPaid(d.id, d.remaining)} className="btn btn-success btn-sm">
+                      <button onClick={() => setPayDebt(d)} className="btn btn-success btn-sm">
                         <CheckCircle2 size={13}/> To'lash
                       </button>
                     )}
+                    <button onClick={() => { setEditDebt(d); setShowModal(true); }} className="btn btn-outline btn-sm">
+                      Tahrirlash
+                    </button>
                   </td>
                 </tr>
               ))}
@@ -158,6 +184,35 @@ export default function DebtList() {
           </table>
         </div>
       </div>
+
+      {showModal && (
+        <NewDebtModal
+          editData={editDebt}
+          onClose={() => { setShowModal(false); setEditDebt(null); }}
+          onSuccess={() => {
+            setShowModal(false);
+            setEditDebt(null);
+            fetchDebts();
+          }}
+        />
+      )}
+
+      {payDebt && (
+        <DebtPaymentModal
+          debt={payDebt}
+          onClose={() => setPayDebt(null)}
+          onSuccess={() => {
+            setPayDebt(null);
+            fetchDebts();
+          }}
+        />
+      )}
+      {historyDebt && (
+        <DebtHistoryModal
+          debt={historyDebt}
+          onClose={() => setHistoryDebt(null)}
+        />
+      )}
     </div>
   );
 }

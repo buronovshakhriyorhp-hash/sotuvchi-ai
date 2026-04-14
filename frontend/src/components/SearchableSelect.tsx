@@ -1,26 +1,38 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Search, ChevronDown, Check, X } from 'lucide-react';
 
-export default function SearchableSelect({ 
+interface SearchableSelectProps<T> {
+  options?: T[];
+  value?: string | number;
+  onChange: (value: any) => void;
+  placeholder?: string;
+  labelKey?: keyof T;
+  valueKey?: keyof T;
+  renderOption?: (option: T) => React.ReactNode;
+  disabled?: boolean;
+  className?: string;
+}
+
+export default function SearchableSelect<T>({ 
   options = [], 
   value, 
   onChange, 
   placeholder = "Tanlang...", 
-  labelKey = 'name', 
-  valueKey = 'id',
+  labelKey = 'name' as keyof T, 
+  valueKey = 'id' as keyof T,
   renderOption,
   disabled = false,
   className = ""
-}) {
+}: SearchableSelectProps<T>) {
   const [isOpen, setIsOpen] = useState(false);
   const [search, setSearch] = useState('');
-  const containerRef = useRef(null);
+  const containerRef = useRef<HTMLDivElement>(null);
 
   const selectedOption = options.find(opt => String(opt[valueKey]) === String(value));
 
   useEffect(() => {
-    const handleClickOutside = (event) => {
-      if (containerRef.current && !containerRef.current.contains(event.target)) {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
         setIsOpen(false);
       }
     };
@@ -41,7 +53,7 @@ export default function SearchableSelect({
     }
   };
 
-  const handleSelect = (opt) => {
+  const handleSelect = (opt: T) => {
     onChange(opt[valueKey]);
     setIsOpen(false);
     setSearch('');
@@ -55,7 +67,7 @@ export default function SearchableSelect({
       >
         <div className="trigger-content">
           {selectedOption ? (
-            <span className="selected-label">{selectedOption[labelKey]}</span>
+            <span className="selected-label">{selectedOption[labelKey] as any}</span>
           ) : (
             <span className="placeholder">{placeholder}</span>
           )}
@@ -81,12 +93,12 @@ export default function SearchableSelect({
             {filteredOptions.length > 0 ? (
               filteredOptions.map((opt) => (
                 <div 
-                  key={opt[valueKey]} 
+                  key={opt[valueKey] as any} 
                   className={`option-item ${String(opt[valueKey]) === String(value) ? 'selected' : ''}`}
                   onClick={() => handleSelect(opt)}
                 >
                   <div className="option-label">
-                    {renderOption ? renderOption(opt) : opt[labelKey]}
+                    {renderOption ? renderOption(opt) : (opt[labelKey] as any)}
                   </div>
                   {String(opt[valueKey]) === String(value) && <Check size={16} className="check-icon" />}
                 </div>

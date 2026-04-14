@@ -3,7 +3,16 @@ import { Search, Plus, CheckCircle2, AlertCircle, Clock } from 'lucide-react';
 import useCurrency from '../../store/useCurrency';
 import useToast from '../../store/useToast';
 
-const DEBTS = [
+interface Debt {
+  id: string;
+  supplier: string;
+  amount: number;
+  due: string;
+  status: 'overdue' | 'paid' | 'pending';
+  note: string;
+}
+
+const DEBTS: Debt[] = [
   { id:'SD-001', supplier:'Textile Pro LLC',     amount:4500000, due:'2026-04-08', status:'overdue', note:'Xomashyo uchun' },
   { id:'SD-002', supplier:'Mega Bo\'yoq',        amount:0,       due:'2026-03-30', status:'paid',    note:'To\'liq to\'landi' },
   { id:'SD-003', supplier:'Global Charm Export', amount:480000,  due:'2026-04-15', status:'pending', note:'Qisman to\'lov kutilmoqda' },
@@ -14,7 +23,7 @@ export default function SupplierDebts() {
   const toast = useToast();
   const [debts, setDebts] = useState(DEBTS);
 
-  const markPaid = (id) => setDebts(prev => prev.map(d => d.id===id ? { ...d, status:'paid', amount:0 } : d));
+  const markPaid = (id: string) => setDebts(prev => prev.map(d => d.id===id ? { ...d, status:'paid', amount:0 } : d));
 
   return (
     <div className="fade-in">

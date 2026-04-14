@@ -4,7 +4,20 @@ import api from '../../api/axios';
 import useCurrency from '../../store/useCurrency';
 import useToast from '../../store/useToast';
 
-const STATUS_MAP = {
+type OrderStatus = 'new' | 'ready' | 'delivered' | 'cancelled';
+
+interface Order {
+  id: number | string;
+  orderNo: string;
+  customerName: string;
+  items: string; // JSON string
+  amount: number;
+  status: OrderStatus;
+  createdAt: string;
+  dueDate?: string;
+}
+
+const STATUS_MAP: Record<OrderStatus, { label: string; badge: string; icon: any }> = {
   new:       { label:'Yangi',        badge:'badge-info',    icon: AlertCircle   },
   ready:     { label:'Tayyor',       badge:'badge-warning', icon: CheckCircle2  },
   delivered: { label:'Yetkazildi',   badge:'badge-active',  icon: Truck         },
@@ -19,7 +32,7 @@ export default function OrderList() {
 
   const [view, setView] = useState('table');
   const [search, setSearch] = useState('');
-  const [orders, setOrders] = useState([]);
+  const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -29,7 +42,7 @@ export default function OrderList() {
   const fetchOrders = async () => {
     setLoading(true);
     try {
-      const res = await api.get('/orders');
+      const res = await api.get<any>('/orders');
       const list = Array.isArray(res) ? res : (res?.orders || res?.data || []);
       setOrders(list);
     } catch (err) {
@@ -45,7 +58,7 @@ export default function OrderList() {
     (o.orderNo || '').toLowerCase().includes(search.toLowerCase())
   );
 
-  const moveStatus = async (id, newStatus) => {
+  const moveStatus = async (id: number | string, newStatus: OrderStatus) => {
     // Optimistic UI update
     setOrders(prev => prev.map(o => o.id === id ? { ...o, status: newStatus } : o));
     try {
@@ -58,7 +71,7 @@ export default function OrderList() {
   };
 
 
-  const StatusBadge = ({ status }) => {
+  const StatusBadge = ({ status }: { status: OrderStatus }) => {
     const s = STATUS_MAP[status] || STATUS_MAP.new;
     const Icon = s.icon;
     return <span className={`badge ${s.badge}`} style={{ display:'inline-flex', gap:'0.2rem', alignItems:'center' }}><Icon size={10}/>{s.label}</span>;
@@ -81,8 +94,8 @@ export default function OrderList() {
       </div>
 
       {/* Summary */}
-      <div className="stats-grid" style={{ gridTemplateColumns:'repeat(4,1fr)', marginBottom:'1.25rem' }}>
-        {Object.entries(STATUS_MAP).map(([key, val]) => {
+      <div className="stats-grid mb-5">
+        {(Object.entries(STATUS_MAP) as [OrderStatus, any][]).map(([key, val]) => {
           const Icon = val.icon;
           const count = orders.filter(o=>o.status===key).length;
           return (
@@ -124,9 +137,9 @@ export default function OrderList() {
                     <td style={{ fontWeight:500 }}>{o.customerName}</td>
                     <td style={{ color:'var(--text-muted)', fontSize:'0.8125rem' }}>
                       {(() => {
-                        let parsed = [];
+                        let parsed: any[] = [];
                         try { parsed = JSON.parse(o.items); } catch(e){}
-                        return parsed.map(i => i.name).join(', ') || '-';
+                        return parsed.map((i: any) => i.name).join(', ') || '-';
                       })()}
                     </td>
                     <td style={{ textAlign:'right', fontWeight:700 }}>{format(o.amount || 0)}</td>
@@ -152,7 +165,8 @@ export default function OrderList() {
       {/* KANBAN VIEW */}
       {view === 'kanban' && (
         <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:'1rem' }}>
-          {KANBAN_COLS.map(col => {
+          {KANBAN_COLS.map(c => {
+            const col = c as OrderStatus;
             const colOrders = orders.filter(o => o.status === col);
             const S = STATUS_MAP[col];
             return (
@@ -168,9 +182,9 @@ export default function OrderList() {
                       <div style={{ fontWeight:600, marginBottom:'0.25rem' }}>{o.customerName}</div>
                       <div style={{ fontSize:'0.8rem', color:'var(--text-muted)', marginBottom:'0.5rem' }}>
                          {(() => {
-                            let parsed = [];
+                            let parsed: any[] = [];
                             try { parsed = JSON.parse(o.items); } catch(e){}
-                            return parsed.map(i => i.name).join(', ') || '-';
+                            return parsed.map((i: any) => i.name).join(', ') || '-';
                           })()}
                       </div>
                       <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>

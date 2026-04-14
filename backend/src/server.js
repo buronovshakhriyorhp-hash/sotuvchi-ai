@@ -4,7 +4,7 @@ const prisma = require('./prisma');
 const cache = require('./utils/cache');
 
 // Env validation
-const requiredEnv = ['DATABASE_URL', 'JWT_SECRET'];
+const requiredEnv = ['DATABASE_URL', 'JWT_SECRET', 'TELEGRAM_BOT_TOKEN'];
 const missingEnv = requiredEnv.filter(env => !process.env[env]);
 if (missingEnv.length > 0) {
   console.error(`\n❌ Error: Missing required environment variables: ${missingEnv.join(', ')}`);
@@ -37,10 +37,12 @@ const start = async () => {
   process.on('SIGTERM', () => closeServer('SIGTERM'));
 
   try {
-    // Initialize Telegram Bot outside of unit/test environment
+    // Initialize Telegram Bots outside of unit/test environment
     if (process.env.NODE_ENV !== 'test') {
       try {
         require('./services/bot.service');
+        require('./services/superadmin.bot.service'); // SaaS SuperAdmin Bot
+        require('./services/cron.service');           // SaaS Periodic Reminders
       } catch (botErr) {
         console.error('Telegram Bot init error:', botErr.message);
       }
@@ -50,7 +52,8 @@ const start = async () => {
     await app.listen({ port, host: '0.0.0.0' });
     console.log(`\n🚀 Nexus ERP Backend: http://0.0.0.0:${port}`);
     console.log(`📊 Health check: http://0.0.0.0:${port}/api/health`);
-    console.log(`💾 Cache: ${cache.connected ? '✅ ACTIVE' : '⚠️ DISABLED'}\n`);
+    const cacheStatus = cache.connected ? '✅ ACTIVE (Redis)' : '⚡ HYBRID (Memory-only)';
+    console.log(`💾 Cache: ${cacheStatus}\n`);
   } catch (err) {
     app.log.error(err);
     process.exit(1);

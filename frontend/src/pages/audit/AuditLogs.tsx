@@ -1,9 +1,23 @@
 import React, { useState, useEffect } from 'react';
 import { Search, Filter, Shield, Clock, User, Info } from 'lucide-react';
 import api from '../../api/axios';
+import useToast from '../../store/useToast';
+import { User as UserType } from '../../types';
+
+interface AuditLog {
+  id: number | string;
+  action: string;
+  entityType: string;
+  entityId: string | number;
+  userId: number;
+  user?: UserType;
+  note?: string;
+  metadata?: any;
+  createdAt: string;
+}
 
 export default function AuditLogs() {
-  const [logs, setLogs] = useState([]);
+  const [logs, setLogs] = useState<AuditLog[]>([]);
   const [loading, setLoading] = useState(true);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
@@ -12,7 +26,7 @@ export default function AuditLogs() {
   const fetchLogs = async () => {
     try {
       setLoading(true);
-      const res = await api.get('/audit', { params: { page, limit: 50, ...filter } });
+      const res = await api.get<any>('/audit', { params: { page, limit: 50, ...filter } });
       setLogs(res?.logs || []);
       setTotal(res?.total || 0);
     } catch (error) {
@@ -26,7 +40,7 @@ export default function AuditLogs() {
     fetchLogs();
   }, [page, filter]);
 
-  const getActionColor = (action) => {
+  const getActionColor = (action: string) => {
     if (action.includes('DELETE')) return 'var(--danger)';
     if (action.includes('UPDATE')) return 'var(--warning)';
     if (action.includes('CREATE')) return 'var(--success)';
@@ -88,9 +102,9 @@ export default function AuditLogs() {
             </thead>
             <tbody>
               {loading ? (
-                <tr><td colSpan="7" style={{ textAlign: 'center', padding: '2rem' }}>Yuklanmoqda...</td></tr>
+                <tr><td colSpan={7} style={{ textAlign: 'center', padding: '2rem' }}>Yuklanmoqda...</td></tr>
               ) : logs.length === 0 ? (
-                <tr><td colSpan="7" style={{ textAlign: 'center', padding: '2rem' }}>Audit loglari topilmadi</td></tr>
+                <tr><td colSpan={7} style={{ textAlign: 'center', padding: '2rem' }}>Audit loglari topilmadi</td></tr>
               ) : logs.map((log) => (
                 <tr key={log.id}>
                   <td>

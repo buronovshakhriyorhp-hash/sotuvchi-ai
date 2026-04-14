@@ -22,8 +22,9 @@ const paySchema = {
     required: ['amount'],
     properties: {
       amount: { type: 'number', minimum: 0.01 },
-      method: { type: 'string', enum: ['cash', 'card', 'bank'], default: 'cash' },
-      note: { type: 'string' }
+      // method: to'lov turi — enum bilan validatsiya qilinadi
+      method: { type: 'string', enum: ['cash', 'card', 'bank', 'transfer'], default: 'cash' },
+      note:   { type: 'string', maxLength: 500 }
     }
   }
 };
@@ -31,7 +32,7 @@ const paySchema = {
 async function debtRoutes(fastify) {
   fastify.get('/', { preHandler: [fastify.authenticate] }, async (request, reply) => {
     const { type, status } = request.query;
-    const where = {};
+    const where = { businessId: request.user.businessId };
     if (type) where.type = type;
     if (status) where.status = status;
 
@@ -45,12 +46,26 @@ async function debtRoutes(fastify) {
       orderBy: { dueDate: 'asc' },
     });
 
-    // Auto mark overdue
+    // Auto mark overdue in DB (batch update debts that are past due)
     const now = new Date();
+    const overdueIds = debts
+      .filter(d => d.status === 'pending' || d.status === 'partial')
+      .filter(d => new Date(d.dueDate) < now)
+      .map(d => d.id);
+
+    if (overdueIds.length > 0) {
+      await prisma.debt.updateMany({
+        where: { id: { in: overdueIds } },
+        data: { status: 'overdue' }
+      });
+    }
+
     const result = debts.map(d => ({
       ...d,
       remaining: Math.round((d.amount - d.paidAmount) * 100) / 100,
-      isOverdue: d.status !== 'paid' && new Date(d.dueDate) < now,
+      isOverdue: d.status !== 'paid' && d.status !== 'cancelled' && new Date(d.dueDate) < now,
+      // Reflect the updated status
+      status: overdueIds.includes(d.id) ? 'overdue' : d.status,
     }));
 
     return sendSuccess(reply, result);
@@ -59,7 +74,7 @@ async function debtRoutes(fastify) {
   fastify.post('/', { preHandler: [fastify.authenticate], schema: debtSchema }, async (request, reply) => {
     const { type, customerId, supplierId, amount, dueDate, note } = request.body;
     const debt = await prisma.debt.create({
-      data: { type, customerId: customerId ? parseInt(customerId) : null, supplierId: supplierId ? parseInt(supplierId) : null, amount: parseFloat(amount), dueDate: new Date(dueDate), note },
+      data: { type, businessId: request.user.businessId, customerId: customerId ? parseInt(customerId) : null, supplierId: supplierId ? parseInt(supplierId) : null, amount: parseFloat(amount), dueDate: new Date(dueDate), note },
     });
     return sendSuccess(reply, debt, 201);
   });
@@ -67,29 +82,38 @@ async function debtRoutes(fastify) {
   // POST /api/debts/:id/pay
   fastify.post('/:id/pay', { preHandler: [fastify.authenticate], schema: paySchema }, async (request, reply) => {
     const debtId = parseInt(request.params.id);
-    const { amount, method = 'cash', note } = request.body;
+    const { amount, method, note } = request.body;
 
-    if (!amount || parseFloat(amount) <= 0) {
-      return reply.status(400).send({ success: false, error: 'To\'lov miqdori musbat bo\'lishi kerak' });
+    const payAmount = parseFloat(amount);
+    if (!payAmount || payAmount <= 0) {
+      return reply.status(400).send({ success: false, error: "To'lov miqdori musbat bo'lishi kerak" });
     }
 
-    const debt = await prisma.debt.findUnique({ where: { id: debtId } });
+    const debt = await prisma.debt.findFirst({ where: { id: debtId, businessId: request.user.businessId } });
     if (!debt) return sendError(reply, 'Qarz topilmadi', 404);
+    if (debt.status === 'paid') return sendError(reply, "Bu qarz allaqachon to'liq to'langan", 400);
+    if (debt.status === 'cancelled') return sendError(reply, "Bekor qilingan qarzga to'lov qilish mumkin emas", 400);
 
-    const payAmt = Math.min(parseFloat(amount), debt.amount - debt.paidAmount);
-    const newPaid = Math.round((debt.paidAmount + payAmt) * 100) / 100;
+    const remaining = debt.amount - debt.paidAmount;
+    const payAmt    = Math.min(payAmount, remaining);
+    const newPaid   = parseFloat((debt.paidAmount + payAmt).toFixed(2));
     const newStatus = newPaid >= debt.amount ? 'paid' : 'partial';
+
+    // method va note ajratilgan — oldin ikkalasi method ga tushib ketardi (kritik xato)
+    const payMethod = method || 'cash';                         // "cash" | "card" | "bank" | "transfer"
+    const payNote   = note ? note.substring(0, 500) : null;    // ixtiyoriy izoh
 
     const [updatedDebt, payment] = await prisma.$transaction([
       prisma.debt.update({ where: { id: debtId }, data: { paidAmount: newPaid, status: newStatus } }),
       prisma.payment.create({
         data: {
           debtId,
+          businessId: request.user.businessId,
           customerId: debt.customerId,
           supplierId: debt.supplierId,
-          amount: payAmt,
-          method,
-          note,
+          amount:     payAmt,
+          method:     payMethod,   // ← To'lov turi: "cash", "card", "bank"
+          note:       payNote      // ← Izoh alohida maydonda
         },
       }),
     ]);
@@ -97,14 +121,49 @@ async function debtRoutes(fastify) {
     return sendSuccess(reply, { debt: updatedDebt, payment });
   });
 
-  // GET /api/debts/summary
+  // PUT /api/debts/:id
+  fastify.put('/:id', { preHandler: [fastify.authenticate], schema: debtSchema }, async (request, reply) => {
+    const debtId = parseInt(request.params.id);
+    const { type, customerId, supplierId, amount, dueDate, note } = request.body;
+    
+    const existing = await prisma.debt.findFirst({ where: { id: debtId, businessId: request.user.businessId } });
+    if (!existing) return sendError(reply, 'Qarz topilmadi', 404);
+
+    const updated = await prisma.debt.update({
+      where: { id: debtId },
+      data: {
+        type,
+        customerId: customerId ? parseInt(customerId) : null,
+        supplierId: supplierId ? parseInt(supplierId) : null,
+        amount: parseFloat(amount),
+        dueDate: new Date(dueDate),
+        note
+      }
+    });
+
+    return sendSuccess(reply, updated);
+  });
+
   fastify.get('/summary', { preHandler: [fastify.authenticate] }, async (request, reply) => {
-    const [total, overdue, paid] = await Promise.all([
-      prisma.debt.aggregate({ _sum: { amount: true }, where: { status: { not: 'paid' } } }),
-      prisma.debt.count({ where: { status: 'overdue' } }),
-      prisma.debt.count({ where: { status: 'paid' } }),
+    const now = new Date();
+    
+    // Fetch pending debts to accurately calculate remaining amount
+    const pendingDebts = await prisma.debt.findMany({
+      where: { businessId: request.user.businessId, status: { not: 'paid' } },
+      select: { amount: true, paidAmount: true }
+    });
+    
+    let totalPending = 0;
+    for(const d of pendingDebts) {
+      totalPending += (d.amount - d.paidAmount);
+    }
+
+    const [overdue, paid] = await Promise.all([
+      prisma.debt.count({ where: { businessId: request.user.businessId, status: { not: 'paid' }, dueDate: { lt: now } } }),
+      prisma.debt.count({ where: { businessId: request.user.businessId, status: 'paid' } }),
     ]);
-    return sendSuccess(reply, { totalPending: total._sum.amount || 0, overdueCount: overdue, paidCount: paid });
+    
+    return sendSuccess(reply, { totalPending, overdueCount: overdue, paidCount: paid });
   });
 }
 

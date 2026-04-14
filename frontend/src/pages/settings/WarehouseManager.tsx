@@ -2,20 +2,20 @@ import React, { useState, useEffect } from 'react';
 import { Building2, Plus, Edit2, Trash2, MapPin, CheckCircle2, XCircle } from 'lucide-react';
 import api from '../../api/axios';
 import useToast from '../../store/useToast';
+import { Warehouse } from '../../types';
 
 export default function WarehouseManager() {
   const toast = useToast();
-  const [warehouses, setWarehouses] = useState([]);
-
+  const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
   const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
-  const [editing, setEditing] = useState(null);
+  const [editing, setEditing] = useState<Warehouse | null>(null);
   const [form, setForm] = useState({ name: '', address: '', isActive: true });
   const [error, setError] = useState('');
 
   const fetchWarehouses = async () => {
     try {
-      const res = await api.get('/warehouses');
+      const res = await api.get<any>('/warehouses');
       const list = Array.isArray(res) ? res : (res?.warehouses || res?.data || []);
       setWarehouses(list);
     } catch (err) {
@@ -30,7 +30,7 @@ export default function WarehouseManager() {
     fetchWarehouses();
   }, []);
 
-  const handleSubmit = async (e) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     if (!form.name.trim()) { setError("Ombor nomi majburiy!"); return; }
@@ -44,18 +44,18 @@ export default function WarehouseManager() {
       setEditing(null);
       setForm({ name: '', address: '', isActive: true });
       fetchWarehouses();
-    } catch (err) {
+    } catch (err: any) {
       setError(typeof err === 'string' ? err : (err?.message || 'Xatolik yuz berdi'));
     }
   };
 
-  const handleEdit = (w) => {
+  const handleEdit = (w: Warehouse) => {
     setEditing(w);
     setForm({ name: w.name, address: w.address || '', isActive: w.isActive });
     setModalOpen(true);
   };
 
-  const handleDelete = async (id) => {
+  const handleDelete = async (id: number) => {
     if (!window.confirm("Haqiqatan ham ushbu omborni o'chirmoqchimisiz?")) return;
     try {
       await api.delete(`/warehouses/${id}`);

@@ -2,27 +2,45 @@ import React, { useState, useEffect } from 'react';
 import { Trash2, Plus, Search, Calendar, Package, ArrowDownRight, XCircle } from 'lucide-react';
 import api from '../../api/axios';
 import useToast from '../../store/useToast';
+import { Product, Warehouse, User } from '../../types';
+
+interface Transaction {
+  id: number;
+  productId: number;
+  warehouseId: number;
+  quantity: number;
+  reason: string;
+  user?: User;
+  product?: Product;
+  warehouse?: Warehouse;
+  createdAt: string;
+}
 
 export default function DroppedProduction() {
   const toast = useToast();
-  const [data, setData] = useState([]);
+  const [data, setData] = useState<Transaction[]>([]);
 
   const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
-  const [products, setProducts] = useState([]);
-  const [warehouses, setWarehouses] = useState([]);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
   const [form, setForm] = useState({ productId: '', warehouseId: '', quantity: '', reason: '' });
 
   const fetchData = async () => {
     try {
       const [txRes, prodRes, wareRes] = await Promise.all([
-        api.get('/api/warehouse', { params: { type: 'OUT' } }),
-        api.get('/products', { params: { limit: 1000 } }),
-        api.get('/api/warehouses')
+        api.get<any>('/api/warehouse', { params: { type: 'OUT' } }),
+        api.get<any>('/products', { params: { limit: 1000 } }),
+        api.get<any>('/api/warehouses')
       ]);
-      setData(txRes.data.data.filter(tx => tx.reason && tx.reason.toLowerCase().includes('ishlab chiqarish')));
-      setProducts(prodRes.data || []);
-      setWarehouses(wareRes.data?.data || []);
+      const txs = Array.isArray(txRes) ? txRes : (txRes?.data?.data || txRes?.data || []);
+      setData(txs.filter((tx: Transaction) => tx.reason && tx.reason.toLowerCase().includes('ishlab chiqarish')));
+      
+      const prods = Array.isArray(prodRes) ? prodRes : (prodRes?.data || []);
+      setProducts(prods);
+
+      const wares = Array.isArray(wareRes) ? wareRes : (wareRes?.data?.data || wareRes?.data || []);
+      setWarehouses(wares);
     } catch (err) {
       console.error(err);
     } finally {
@@ -32,7 +50,7 @@ export default function DroppedProduction() {
 
   useEffect(() => { fetchData(); }, []);
 
-  const handleSubmit = async (e) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
       await api.post('/api/warehouse', {
@@ -47,7 +65,7 @@ export default function DroppedProduction() {
       setForm({ productId: '', warehouseId: '', quantity: '', reason: '' });
       toast.success("Brak muvaffaqiyatli qayd etildi");
       fetchData();
-    } catch (err) { toast.error(err.response?.data?.error || 'Xatolik'); }
+    } catch (err: any) { toast.error(err?.response?.data?.error || err || 'Xatolik'); }
   };
 
 
@@ -87,7 +105,7 @@ export default function DroppedProduction() {
                   <td>{tx.user?.name}</td>
                 </tr>
               )) : (
-                <tr><td colSpan="6" style={{textAlign:'center', padding:'3rem', color:'var(--text-muted)' }}>Hech qanday ma'lumot yo'q</td></tr>
+                <tr><td colSpan={6} style={{textAlign:'center', padding:'3rem', color:'var(--text-muted)' }}>Hech qanday ma'lumot yo'q</td></tr>
               )}
             </tbody>
           </table>

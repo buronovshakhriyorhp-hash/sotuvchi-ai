@@ -4,6 +4,7 @@ class CacheManager {
   constructor() {
     this.client = null;
     this.connected = false;
+    this.memoryCache = new Map(); // Fallback for local/dev without Redis
   }
 
   async connect() {
@@ -15,11 +16,27 @@ class CacheManager {
       this.client = Redis.createClient({
         url: process.env.REDIS_URL || 'redis://localhost:6379',
         socket: {
-          reconnectStrategy: (retries) => Math.min(retries * 50, 500),
+          reconnectStrategy: (retries) => {
+            if (retries > 3) { // Reduced retries for faster fallback
+              if (this.connected !== false) {
+                console.warn('⚠️ Redis ulanishini to\'xtatdi. Tizim In-Memory kesh bilan ishlaydi.');
+              }
+              this.connected = false;
+              return false; 
+            }
+            return Math.min(retries * 500, 2000);
+          },
+          connectTimeout: 2000
         },
       });
 
-      this.client.on('error', (err) => console.error('Redis Client Error', err));
+      this.client.on('error', (err) => {
+        if (this.connected) {
+          console.warn('⚠️ Redis Error:', err.message);
+          this.connected = false;
+        }
+      });
+
       this.client.on('connect', () => {
         console.log('✅ Redis Cache Connected');
         this.connected = true;
@@ -27,7 +44,7 @@ class CacheManager {
 
       await this.client.connect();
     } catch (err) {
-      console.error('Redis connection error:', err.message);
+      console.warn('⚠️ Redis ulanishda xato. Tizim In-Memory kesh bilan ishlaydi.');
       this.connected = false;
     }
   }
@@ -40,84 +57,103 @@ class CacheManager {
   }
 
   async get(key) {
-    if (!this.connected) return null;
-    try {
-      const data = await this.client.get(key);
-      return data ? JSON.parse(data) : null;
-    } catch (error) {
-      console.error(`Cache GET error for ${key}:`, error.message);
+    // 1. Try Redis
+    if (this.connected) {
+      try {
+        const data = await this.client.get(key);
+        return data ? JSON.parse(data) : null;
+      } catch (error) {
+        this.connected = false;
+      }
+    }
+
+    // 2. Fallback to Memory
+    const entry = this.memoryCache.get(key);
+    if (!entry) return null;
+    
+    if (entry.expiry && entry.expiry < Date.now()) {
+      this.memoryCache.delete(key);
       return null;
     }
+    return entry.value;
   }
 
   async set(key, value, ttl = 300) {
-    if (!this.connected) return false;
-    try {
-      const options = ttl ? { EX: ttl } : undefined;
-      await this.client.set(key, JSON.stringify(value), options);
-      return true;
-    } catch (error) {
-      console.error(`Cache SET error for ${key}:`, error.message);
-      return false;
+    // 1. Try Redis
+    if (this.connected) {
+      try {
+        const options = ttl ? { EX: ttl } : undefined;
+        await this.client.set(key, JSON.stringify(value), options);
+        return true;
+      } catch (error) {
+        this.connected = false;
+      }
     }
+
+    // 2. Fallback to Memory
+    this.memoryCache.set(key, {
+      value,
+      expiry: ttl ? Date.now() + ttl * 1000 : null
+    });
+    return true;
   }
 
   async del(key) {
-    if (!this.connected) return false;
-    try {
-      await this.client.del(key);
-      return true;
-    } catch (error) {
-      console.error(`Cache DEL error for ${key}:`, error.message);
-      return false;
+    if (this.connected) {
+      try {
+        await this.client.del(key);
+      } catch (e) { this.connected = false; }
     }
+    this.memoryCache.delete(key);
+    return true;
   }
 
   async delPattern(pattern) {
-    if (!this.connected) return false;
-    try {
-      const keys = await this.client.keys(pattern);
-      if (keys.length > 0) {
-        await this.client.del(keys);
-      }
-      return true;
-    } catch (error) {
-      console.error(`Cache DEL PATTERN error for ${pattern}:`, error.message);
-      return false;
+    if (this.connected) {
+      try {
+        const keys = await this.client.keys(pattern);
+        if (keys.length > 0) await this.client.del(keys);
+      } catch (e) { this.connected = false; }
     }
+
+    // Memory pattern deletion
+    const regex = new RegExp('^' + pattern.replace(/\*/g, '.*') + '$');
+    for (const key of this.memoryCache.keys()) {
+      if (regex.test(key)) this.memoryCache.delete(key);
+    }
+    return true;
+  }
+  
+  // Clean memory cache periodically
+  startCleanup() {
+     setInterval(() => {
+        const now = Date.now();
+        for (const [key, entry] of this.memoryCache.entries()) {
+           if (entry.expiry && entry.expiry < now) this.memoryCache.delete(key);
+        }
+     }, 60000);
   }
 
-  async mget(keys) {
-    if (!this.connected) return new Array(keys.length).fill(null);
-    try {
-      const values = await this.client.mGet(keys);
-      return values.map((v) => (v ? JSON.parse(v) : null));
-    } catch (error) {
-      console.error('Cache MGET error:', error.message);
-      return new Array(keys.length).fill(null);
-    }
-  }
+  async invalidateEntity(entityType, businessId) {
+    if (!businessId) return;
 
-  async mset(keyValuePairs, ttl = 300) {
-    if (!this.connected) return false;
-    try {
-      const pipeline = this.client.multi();
-      for (const [key, value] of keyValuePairs) {
-        pipeline.set(key, JSON.stringify(value), ttl ? { EX: ttl } : undefined);
-      }
-      await pipeline.exec();
-      return true;
-    } catch (error) {
-      console.error('Cache MSET error:', error.message);
-      return false;
+    // Pattern to catch all list variations: entity:*:businessId:*
+    // This catches "products:list:1:...", "products:barcode:1:...", etc.
+    const pattern = `${entityType}:*:${businessId}:*`;
+    await this.delPattern(pattern);
+    
+    // Also clear specific detail caches e.g., "product:1:123"
+    await this.delPattern(`${entityType.slice(0, -1)}:${businessId}:*`);
+    
+    // Clear related reports as they depend on this data
+    if (['sales', 'products', 'expenses', 'debts'].includes(entityType)) {
+      await this.delPattern(`report:*:${businessId}:*`);
+      await this.delPattern(`report:${businessId}:*`);
     }
-  }
-
-  // Helper: invalidate all cache related to entities
-  async invalidateEntity(entityType) {
-    await this.delPattern(`cache:${entityType}:*`);
-    await this.delPattern(`list:${entityType}:*`);
   }
 }
 
-module.exports = new CacheManager();
+const manager = new CacheManager();
+manager.startCleanup();
+module.exports = manager;
+

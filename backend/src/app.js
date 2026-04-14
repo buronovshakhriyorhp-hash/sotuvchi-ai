@@ -18,24 +18,45 @@ const categoryRoutes = require('./routes/categories');
 const customerRoutes = require('./routes/customers');
 const supplierRoutes = require('./routes/suppliers');
 const saleRoutes = require('./routes/sales');
-const warehouseRoutes = require('./routes/warehouse');
+const warehouseRoutes = require('./routes/warehouse-unified');
 const debtRoutes = require('./routes/debts');
 const staffRoutes = require('./routes/staff');
 const orderRoutes = require('./routes/orders');
 const reportRoutes = require('./routes/reports');
-const warehousesRoutes = require('./routes/warehouses');
 const attributeRoutes = require('./routes/attributes');
 const searchRoutes = require('./routes/search');
 const telegramRoutes = require('./routes/telegram');
 const expenseRoutes = require('./routes/expenses');
 const auditRoutes = require('./routes/audit');
 const permissionRoutes = require('./routes/permissions');
+const productionRoutes = require('./routes/production');
+const saasRoutes = require('./routes/saas');
+const businessRoutes = require('./routes/business');
+const prisma = require('./prisma');
 
 function buildApp() {
   const app = Fastify({
-    logger: process.env.NODE_ENV !== 'production' ? {
+    logger: (process.env.NODE_ENV || 'production') !== 'production' ? {
       transport: { target: 'pino-pretty', options: { colorize: true } }
-    } : false
+    } : {
+      transport: {
+        targets: [
+          {
+            target: 'pino-roll',
+            options: {
+              file: path.join(__dirname, '../logs/app.log'),
+              frequency: 'daily',
+              size: '10m',
+              mkdir: true
+            }
+          },
+          {
+            target: 'pino/file',
+            options: { destination: 1 } // stdout
+          }
+        ]
+      }
+    }
   });
 
   // Initialize cache
@@ -46,8 +67,8 @@ function buildApp() {
     contentSecurityPolicy: process.env.NODE_ENV === 'production',
   });
 
-  // Rate limiting (adaptive based on environment)
-  const rateMax = process.env.NODE_ENV === 'production' ? 1000 : 500;
+  // Rate limiting (Relaxed for high-performance POS)
+  const rateMax = process.env.NODE_ENV === 'production' ? 2000 : 1000;
   app.register(rateLimit, {
     max: rateMax,
     timeWindow: '1 minute'
@@ -55,7 +76,9 @@ function buildApp() {
 
   // Plugins
   app.register(cors, {
-    origin: true,
+    origin: process.env.NODE_ENV === 'production' 
+      ? [process.env.FRONTEND_URL].filter(Boolean) 
+      : true, // Allow all in dev, restricted in prod
     credentials: true,
   });
 
@@ -82,12 +105,51 @@ function buildApp() {
     sign: { expiresIn: '8h' },
   });
 
-  // Auth decorator — routes'da await request.jwtVerify() ishlatish uchun
+  // Auth decorator
   app.decorate('authenticate', async function(request, reply) {
     try {
       await request.jwtVerify();
-    } catch {
-      reply.status(401).send({ success: false, error: 'Token yaroqsiz yoki muddati o\'tgan' });
+      
+      // SUPERADMIN Bypass: If user is SUPERADMIN, skip business status/trial checks
+      if (request.user.role === 'SUPERADMIN') return;
+
+      const { businessId } = request.user;
+      if (!businessId) return;
+
+      // SaaS Hardening: Check if business is active and trial is valid (Cached for 1 minute)
+      const cacheKey = `business:active:${businessId}`;
+      let bizStatus = await cache.get(cacheKey);
+
+      if (bizStatus === null) {
+        const business = await prisma.business.findUnique({
+          where: { id: businessId },
+          select: { isActive: true, trialExpiresAt: true, plan: true }
+        });
+        
+        if (!business) {
+          return reply.status(404).send({ success: false, error: 'Biznes topilmadi' });
+        }
+
+        const isTrialValid = !business.trialExpiresAt || business.trialExpiresAt > new Date();
+        const active = !!business.isActive && (business.plan === 'PREMIUM' || isTrialValid);
+        
+        bizStatus = { active, business };
+        await cache.set(cacheKey, bizStatus, 60); // Cache for 1 min
+      }
+      
+      if (!bizStatus.active) {
+        return reply.status(403).send({ 
+          success: false, 
+          error: 'Hisobingiz faol emas yoki sinov muddati tugagan. Iltimos, administrator bilan bog\'laning.',
+          trialExpired: true 
+        });
+      }
+
+      // Add user to request for route access
+      // (JWT Verify already adds it, but we ensure it's here)
+    } catch (err) {
+      const msg = err.name === 'TokenExpiredError' ? 'Token muddati o\'tgan' : 'Token yaroqsiz';
+      reply.status(401).send({ success: false, error: msg });
     }
   });
 
@@ -102,50 +164,79 @@ function buildApp() {
     });
   }
 
-  // Prometheus metrics endpoint for monitoring
-  const collectDefaultMetrics = client.collectDefaultMetrics;
-  collectDefaultMetrics({ timeout: 5000 });
-  app.get('/metrics', async () => {
+  // Prometheus metrics — SEC-07: faqat authenticated foydalanuvchilar (ADMIN/SUPERADMIN)
+  client.collectDefaultMetrics({ timeout: 5000 });
+  app.get('/metrics', { preHandler: [app.authenticate] }, async (request, reply) => {
+    // Faqat ADMIN yoki SUPERADMIN ko'rishi mumkin
+    if (!['ADMIN', 'SUPERADMIN'].includes(request.user.role)) {
+      return reply.status(403).send({ success: false, error: 'Ruxsat yo\'q' });
+    }
+    reply.header('Content-Type', client.register.contentType);
     return await client.register.metrics();
   });
 
-  // Health check
-  app.get('/api/health', async () => ({ status: 'ok', time: new Date().toISOString(), cache: cache.connected }));
+  // Health check (Checks connectivity to DB and Cache)
+  app.get('/api/health', async (request, reply) => {
+    try {
+      await prisma.$queryRaw`SELECT 1`;
+      return { 
+        status: 'ok', 
+        time: new Date().toISOString(), 
+        database: 'connected', 
+        cache: cache.connected 
+      };
+    } catch (err) {
+      app.log.error('Health Check Failed:', err);
+      reply.status(503).send({ 
+        status: 'error', 
+        database: 'disconnected', 
+        cache: cache.connected 
+      });
+    }
+  });
 
   // Routes
-  app.register(authRoutes,      { prefix: '/api/auth' });
-  app.register(productRoutes,   { prefix: '/api/products' });
-  app.register(categoryRoutes,  { prefix: '/api/categories' });
-  app.register(customerRoutes,  { prefix: '/api/customers' });
-  app.register(supplierRoutes,  { prefix: '/api/suppliers' });
-  app.register(saleRoutes,      { prefix: '/api/sales' });
-  app.register(warehouseRoutes, { prefix: '/api/warehouse' });
-  app.register(debtRoutes,      { prefix: '/api/debts' });
-  app.register(staffRoutes,     { prefix: '/api/staff' });
-  app.register(orderRoutes,     { prefix: '/api/orders' });
-  app.register(reportRoutes,    { prefix: '/api/reports' });
-  app.register(warehousesRoutes, { prefix: '/api/warehouses' });
+  // Rate-limit login routeida bevosita belgilangan (auth.js ichida config.rateLimit)
+  app.register(authRoutes,       { prefix: '/api/auth' });
+  app.register(productRoutes,    { prefix: '/api/products' });
+  app.register(categoryRoutes,   { prefix: '/api/categories' });
+  app.register(customerRoutes,   { prefix: '/api/customers' });
+  app.register(supplierRoutes,   { prefix: '/api/suppliers' });
+  app.register(saleRoutes,       { prefix: '/api/sales' });
+  app.register(warehouseRoutes,  { prefix: '/api/warehouses' }); // Unified
+  app.register(debtRoutes,       { prefix: '/api/debts' });
+  app.register(staffRoutes,      { prefix: '/api/staff' });
+  app.register(orderRoutes,      { prefix: '/api/orders' });
+  app.register(reportRoutes,     { prefix: '/api/reports' });
   app.register(attributeRoutes,  { prefix: '/api/attributes' });
   app.register(searchRoutes,     { prefix: '/api/search' });
   app.register(telegramRoutes,   { prefix: '/api/telegram' });
   app.register(expenseRoutes,    { prefix: '/api/expenses' });
   app.register(auditRoutes,      { prefix: '/api/audit' });
   app.register(permissionRoutes, { prefix: '/api/permissions' });
+  app.register(saasRoutes,       { prefix: '/api/saas' });
+  app.register(productionRoutes, { prefix: '/api/production' });
+  app.register(businessRoutes,   { prefix: '/api/business' });
 
   // Global error handler
   app.setErrorHandler((error, request, reply) => {
-    const statusCode = error.statusCode || 500;
+    const statusCode = error.statusCode || (error.validation ? 400 : 500);
     const isClientError = statusCode >= 400 && statusCode < 500;
 
     app.log.error({
       err: error,
-      request: { method: request.method, url: request.url, body: request.body }
+      requestId: request.id,
+      method: request.method,
+      url: request.url,
+      body: request.body,
+      user: request.user ? { id: request.user.id, businessId: request.user.businessId } : 'guest'
     });
 
     reply.status(statusCode).send({
       success: false,
-      error: isClientError ? error.message : 'Serverda ichki xatolik yuz berdi',
-      ...(process.env.NODE_ENV !== 'production' && { stack: error.stack })
+      error: isClientError ? error.message : 'Serverda ichki xatolik yuz berdi. Iltimos, keyinroq qayta urinib ko\'ring.',
+      // SEC-11: Default = production (stack trace HECH QACHON chiqmasligi kerak)
+      ...((process.env.NODE_ENV || 'production') !== 'production' && { details: error.details, stack: error.stack })
     });
   });
 

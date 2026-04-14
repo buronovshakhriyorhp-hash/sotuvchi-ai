@@ -1,6 +1,9 @@
 import React, { useState } from 'react';
-import { Building2, Palette, Bell, Shield, Save, Moon, Sun, Globe, Printer, MessageSquare, ExternalLink, Download, RefreshCw } from 'lucide-react';
+import { Building2, Palette, Bell, Shield, Save, Moon, Sun, Globe, Printer, MessageSquare, ExternalLink, Download, RefreshCw, Keyboard, Trash2 } from 'lucide-react';
 import api from '../../api/axios';
+
+import useCurrency from '../../store/useCurrency';
+import useToast from '../../store/useToast';
 
 const TABS = [
   { id:'company',  label:'Kompaniya',     icon: Building2 },
@@ -8,20 +11,64 @@ const TABS = [
   { id:'telegram', label:'Telegram Bot',  icon: MessageSquare },
   { id:'security', label:'Xavfsizlik',    icon: Shield    },
   { id:'print',    label:'Chop etish',    icon: Printer   },
+  { id:'kassir',   label:'Kassir POS',    icon: Keyboard  },
 ];
 
-const Toggle = ({ value, onChange }) => (
+interface ToggleProps {
+  value: boolean;
+  onChange: (v: boolean) => void;
+}
+
+const Toggle = ({ value, onChange }: ToggleProps) => (
   <div onClick={() => onChange(!value)} style={{ width:44, height:24, borderRadius:999, background: value ? 'var(--primary)' : 'var(--border-strong)', cursor:'pointer', position:'relative', transition:'background 0.2s', flexShrink:0 }}>
     <div style={{ width:20, height:20, borderRadius:'50%', background:'#fff', position:'absolute', top:2, left: value ? 22 : 2, transition:'left 0.2s', boxShadow:'0 1px 3px rgba(0,0,0,0.2)' }}/>
   </div>
 );
+
+interface SettingsForm {
+  companyName: string;
+  phone: string;
+  address: string;
+  usdRate: number;
+  currency: string;
+  language: string;
+  lowStockAlert: boolean;
+  overdueAlert: boolean;
+  newOrderAlert: boolean;
+  bigSaleAlert: boolean;
+  twoFA: boolean;
+  sessionTimeout: string;
+  receiptFooter: string;
+  printCopies: string;
+  telegramNotifications: boolean;
+  posCheckoutKey: string;
+  posAddCustomerKey: string;
+  posSearchKey: string;
+  posClearCartKey: string;
+  posPrintPdfKey: string;
+  posPrintThermalKey: string;
+}
+
+interface BotData {
+  loading: boolean;
+  data: {
+    qrCode: string;
+    link: string;
+    username: string;
+  } | null;
+}
 export default function Settings() {
   const [tab, setTab] = useState('company');
-  const [saved, setSaved] = useState(false);
-  const [form, setForm] = useState({
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const toast = useToast();
+  const syncCurrency = useCurrency(s => s.syncWithBackend);
+  
+  const [form, setForm] = useState<SettingsForm>({
     companyName: 'Nexus Savdo LLC',
-    phone: '+998 94 100 91 22',
-    address: 'Toshkent sh., Yunusobod tumani',
+    phone: '',
+    address: '',
+    usdRate: 12900,
     currency: 'uzs',
     language: 'uz',
     lowStockAlert: true,
@@ -33,14 +80,42 @@ export default function Settings() {
     receiptFooter: 'Xaridingiz uchun rahmat! Qayta ko\'ring!',
     printCopies: '1',
     telegramNotifications: true,
+    posCheckoutKey: localStorage.getItem('pos_hotkey_checkout') || 'F2',
+    posAddCustomerKey: localStorage.getItem('pos_hotkey_addcustomer') || 'F4',
+    posSearchKey: localStorage.getItem('pos_hotkey_search') || 'Ctrl + F',
+    posClearCartKey: localStorage.getItem('pos_hotkey_clearcart') || 'Ctrl + Delete',
+    posPrintPdfKey: localStorage.getItem('pos_hotkey_printpdf') || 'Ctrl + P',
+    posPrintThermalKey: localStorage.getItem('pos_hotkey_printthermal') || 'Ctrl + T',
   });
 
-  const [botData, setBotData] = useState({ loading: false, data: null });
+  const [botData, setBotData] = useState<BotData>({ loading: false, data: null });
+
+  const fetchBusinessData = async () => {
+    setLoading(true);
+    try {
+      const biz: any = await api.get('/business/settings');
+      if (biz) {
+        setForm(f => ({
+          ...f,
+          companyName: biz.name || f.companyName,
+          phone: biz.ownerPhone || f.phone,
+          usdRate: Number(biz.settings?.usdRate) || f.usdRate,
+          currency: biz.settings?.baseCurrency || f.currency,
+          receiptFooter: biz.settings?.receiptFooter || f.receiptFooter,
+          telegramNotifications: biz.settings?.notifySale !== false
+        }));
+      }
+    } catch (err) {
+      toast.error('Biznes ma\'lumotlarini yuklashda xatolik');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const fetchBotInfo = async () => {
     setBotData(prev => ({ ...prev, loading: true }));
     try {
-      const data = await api.get('/telegram/info');
+      const data = await api.get<any>('/telegram/info');
       if (data) {
         setBotData({ loading: false, data });
       }
@@ -51,17 +126,89 @@ export default function Settings() {
   };
 
   React.useEffect(() => {
+    fetchBusinessData();
+    syncCurrency();
+  }, []);
+
+  React.useEffect(() => {
     if (tab === 'telegram' && !botData.data) {
       fetchBotInfo();
     }
   }, [tab]);
 
-  const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
+  const set = (k: string, v: any) => setForm(f => ({ ...f, [k]: v }));
 
-  const handleSave = () => {
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2500);
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      // 1. Save local hotkeys
+      localStorage.setItem('pos_hotkey_checkout', form.posCheckoutKey);
+      localStorage.setItem('pos_hotkey_addcustomer', form.posAddCustomerKey);
+      localStorage.setItem('pos_hotkey_search', form.posSearchKey);
+      localStorage.setItem('pos_hotkey_clearcart', form.posClearCartKey);
+      localStorage.setItem('pos_hotkey_printpdf', form.posPrintPdfKey);
+      localStorage.setItem('pos_hotkey_printthermal', form.posPrintThermalKey);
+
+      // 2. Save to backend
+      await api.patch('/business/settings', {
+        name: form.companyName,
+        settings: {
+          usdRate: Number(form.usdRate),
+          baseCurrency: form.currency,
+          receiptFooter: form.receiptFooter,
+          notifySale: form.telegramNotifications
+        }
+      });
+
+      await syncCurrency();
+      toast.success('Barcha sozlamalar saqlandi');
+    } catch (err) {
+      toast.error('Saqlashda xatolik yuz berdi');
+    } finally {
+      setSaving(false);
+    }
   };
+
+  const handleHotkeyDown = (e: React.KeyboardEvent<HTMLInputElement>, keyName: string) => {
+    e.preventDefault();
+    if (e.key === 'Backspace' || e.key === 'Delete') {
+      set(keyName, '');
+      return;
+    }
+    const keys = [];
+    if (e.ctrlKey) keys.push('Ctrl');
+    if (e.altKey) keys.push('Alt');
+    if (e.shiftKey) keys.push('Shift');
+    if (e.metaKey) keys.push('Cmd');
+    
+    if (!['Control', 'Alt', 'Shift', 'Meta'].includes(e.key)) {
+      const key = e.key === ' ' ? 'Space' : e.key.length === 1 ? e.key.toUpperCase() : e.key;
+      keys.push(key);
+      set(keyName, keys.join(' + '));
+    }
+  };
+
+  const renderHotkeyRow = (label: string, keyName: keyof SettingsForm) => (
+    <div className="hotkey-row">
+      <div className="hotkey-label">{label}</div>
+      <div className="hotkey-input-wrapper">
+        <input 
+          className="hotkey-input" 
+          value={form[keyName] as string} 
+          onKeyDown={(e) => handleHotkeyDown(e, keyName)}
+          placeholder="Tugmani bosing..." 
+          readOnly
+        />
+        <button 
+          className="hotkey-action-btn"
+          onClick={() => set(keyName, '')}
+          title="Tozalash"
+        >
+          <Trash2 size={16} />
+        </button>
+      </div>
+    </div>
+  );
 
   return (
     <div className="fade-in">
@@ -70,8 +217,13 @@ export default function Settings() {
           <h1 className="page-title">Sozlamalar</h1>
           <p className="page-subtitle">Tizim va kompaniya sozlamalari</p>
         </div>
-        <button onClick={handleSave} className={`btn ${saved ? 'btn-success' : 'btn-primary'}`}>
-          <Save size={16}/> {saved ? '✓ Saqlandi!' : 'Saqlash'}
+        <button 
+          onClick={handleSave} 
+          disabled={saving || loading}
+          className={`btn ${saving ? 'btn-ghost' : 'btn-primary'}`}
+          style={{ minWidth: '120px' }}
+        >
+          {saving ? <RefreshCw size={16} className="spin" /> : <><Save size={16}/> Saqlash</>}
         </button>
       </div>
 
@@ -89,21 +241,45 @@ export default function Settings() {
         </div>
 
         {/* Content */}
-        <div className="card">
+        <div className="card" style={{ minHeight: '400px', position: 'relative' }}>
+          {loading && (
+            <div style={{ position:'absolute', inset:0, background:'rgba(255,255,255,0.7)', zIndex:10, display:'flex', alignItems:'center', justifyContent:'center', borderRadius:'inherit', backdropFilter: 'blur(2px)' }}>
+              <RefreshCw size={32} className="spin" style={{ color:'var(--primary)' }}/>
+            </div>
+          )}
           {tab === 'company' && (
             <div>
               <div className="card-title" style={{ marginBottom:'1.5rem' }}>Kompaniya ma'lumotlari</div>
               <div style={{ display:'flex', flexDirection:'column', gap:'1.25rem' }}>
-                {[
-                  ['Kompaniya nomi', 'companyName', 'text', 'Nexus Savdo LLC'],
-                  ['Telefon raqam',  'phone',       'text', '+998 94 100 91 22'],
-                  ['Manzil',         'address',     'text', 'Toshkent sh.'],
-                ].map(([label, key, type, ph]) => (
-                  <div key={key} className="form-group" style={{ marginBottom:0 }}>
-                    <label className="form-label">{label}</label>
-                    <input className="input-field" type={type} value={form[key]} placeholder={ph} onChange={e => set(key, e.target.value)} />
+                <div className="form-group" style={{ marginBottom:0 }}>
+                  <label className="form-label">Kompaniya nomi</label>
+                  <input className="input-field" type="text" value={form.companyName} placeholder="Nexus Savdo LLC" onChange={e => set('companyName', e.target.value)} />
+                </div>
+                
+                <div className="form-row" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                  <div className="form-group" style={{ marginBottom:0 }}>
+                    <label className="form-label">Telefon raqam</label>
+                    <input className="input-field" type="text" value={form.phone} placeholder="+998 90 123 45 67" onChange={e => set('phone', e.target.value)} />
                   </div>
-                ))}
+                  <div className="form-group" style={{ marginBottom:0 }}>
+                    <label className="form-label">Valyuta kursi (1 USD = ? UZS)</label>
+                    <div style={{ position: 'relative' }}>
+                      <input 
+                        className="input-field" 
+                        type="number" 
+                        value={form.usdRate} 
+                        onChange={e => set('usdRate', Number(e.target.value))} 
+                        style={{ paddingRight: '3rem', fontWeight: 700, color: 'var(--primary-dark)' }}
+                      />
+                      <span style={{ position: 'absolute', right: '1rem', top: '50%', transform: 'translateY(-50%)', fontWeight: 600, color: 'var(--text-muted)', fontSize: '0.8rem' }}>UZS</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="form-group" style={{ marginBottom:0 }}>
+                  <label className="form-label">Manzil</label>
+                  <input className="input-field" type="text" value={form.address} placeholder="Toshkent sh." onChange={e => set('address', e.target.value)} />
+                </div>
                 <div className="form-row">
                   <div className="form-group" style={{ marginBottom:0 }}>
                     <label className="form-label">Valyuta</label>
@@ -140,7 +316,7 @@ export default function Settings() {
                       <div style={{ fontWeight:600, fontSize:'0.9rem' }}>{title}</div>
                       <div style={{ fontSize:'0.8125rem', color:'var(--text-muted)', marginTop:'0.2rem' }}>{desc}</div>
                     </div>
-                    <Toggle value={form[key]} onChange={v=>set(key,v)}/>
+                    <Toggle value={(form as any)[key]} onChange={v=>set(key,v)}/>
                   </div>
                 ))}
               </div>
@@ -166,10 +342,12 @@ export default function Settings() {
                           <ExternalLink size={14}/> Botga o'tish
                         </a>
                         <button className="btn btn-sm btn-secondary" onClick={() => {
-                          const link = document.createElement('a');
-                          link.href = botData.data.qrCode;
-                          link.download = 'bot_qr.png';
-                          link.click();
+                          if (botData.data) {
+                            const link = document.createElement('a');
+                            link.href = botData.data.qrCode;
+                            link.download = 'bot_qr.png';
+                            link.click();
+                          }
                         }}>
                           <Download size={14}/> Yuklash
                         </button>
@@ -211,6 +389,26 @@ export default function Settings() {
                     )}
                   </div>
                 </div>
+              </div>
+            </div>
+          )}
+
+          {tab === 'kassir' && (
+            <div>
+              <div className="card-title" style={{ marginBottom:'1.5rem' }}>O'ta Tezkor Amallar (POS Hotkeys)</div>
+              
+              <div style={{ background:'var(--info-bg)', padding:'1rem', borderRadius:'var(--radius)', border:'1px solid rgba(59, 130, 246, 0.2)', fontSize:'0.875rem', color:'var(--info)', display:'flex', gap:'0.75rem', marginBottom:'1.5rem' }}>
+                <Bell size={20} style={{ flexShrink:0 }} />
+                Yangi tugmalar birikmasini (masalan: Ctrl + Shift + A) saqlash uchun kiritish maydonini bosib, klaviaturadan birikmani tering.
+              </div>
+
+              <div className="hotkeys-list">
+                {renderHotkeyRow("Mijoz to'lovi (Checkout modalini ochish)", 'posCheckoutKey')}
+                {renderHotkeyRow("Yangi mijoz qo'shish modalini ochish", 'posAddCustomerKey')}
+                {renderHotkeyRow("Mahsulot izlashga (qidiruv) o'tish", 'posSearchKey')}
+                {renderHotkeyRow("Savatni batamom tozalash", 'posClearCartKey')}
+                {renderHotkeyRow("Chekni PDF shaklida chiqarish", 'posPrintPdfKey')}
+                {renderHotkeyRow("Chekni Termal printerdan chiqarish", 'posPrintThermalKey')}
               </div>
             </div>
           )}

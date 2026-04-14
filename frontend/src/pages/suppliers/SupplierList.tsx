@@ -3,12 +3,13 @@ import { Search, Plus, Truck, PhoneCall, MapPin, ShoppingBag } from 'lucide-reac
 import api from '../../api/axios';
 import useCurrency from '../../store/useCurrency';
 import useToast from '../../store/useToast';
+import { Supplier } from '../../types';
 
 export default function SupplierList() {
   const { format } = useCurrency();
   const toast = useToast();
   const [search, setSearch] = useState('');
-  const [suppliers, setSuppliers] = useState([]);
+  const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -19,7 +20,7 @@ export default function SupplierList() {
   const fetchSuppliers = async () => {
     setLoading(true);
     try {
-      const res = await api.get('/suppliers', { params: { search } });
+      const res = await api.get<any>('/suppliers', { params: { search } });
       const list = Array.isArray(res) ? res : (res?.suppliers || res?.data || []);
       setSuppliers(list);
     } catch (err) {
@@ -56,8 +57,8 @@ export default function SupplierList() {
            <div className="card"><div className="empty-state"><span className="empty-state-title">Yuklanmoqda...</span></div></div>
         ) : suppliers.length === 0 ? (
           <div className="card"><div className="empty-state"><span className="empty-state-title">Yetkazuvchi topilmadi</span></div></div>
-        ) : suppliers.map((s)=>(
-          <div key={s.id} className="card" style={{ padding:'1.5rem', display:'flex', flexDirection:'column', gap:'1.25rem', borderLeft:`4px solid ${s.debt>0?'var(--danger)':'var(--success)'}` }}>
+        ) : suppliers.map((s: Supplier)=>(
+          <div key={s.id} className="card" style={{ padding:'1.5rem', display:'flex', flexDirection:'column', gap:'1.25rem', borderLeft:`4px solid ${(s.debt || 0)>0?'var(--danger)':'var(--success)'}` }}>
             <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start' }}>
               <div>
                 <div style={{ fontWeight:700, fontSize:'1.0625rem', color:'var(--text)' }}>{s.name}</div>
@@ -86,8 +87,8 @@ export default function SupplierList() {
             <div style={{ borderTop:'1px solid var(--border)', paddingTop:'1rem', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
               <div>
                 <div style={{ fontSize:'0.75rem', color:'var(--text-muted)', fontWeight:500 }}>Qarz holati</div>
-                <div style={{ fontWeight:700, color: s.debt>0?'var(--danger)':'var(--success)', fontSize:'1rem' }}>
-                  {s.debt===0 ? '✓ Qarz yo\'q' : format(s.debt)}
+                <div style={{ fontWeight:700, color: (s.debt || 0)>0?'var(--danger)':'var(--success)', fontSize:'1rem' }}>
+                  {(s.debt === 0 || !s.debt) ? '✓ Qarz yo\'q' : format(s.debt)}
                 </div>
               </div>
               <div style={{ display:'flex', gap:'0.375rem' }}>

@@ -3,15 +3,16 @@ import { Search, Plus, PhoneCall, MoreVertical, TrendingDown, TrendingUp, Minus,
 import api from '../../api/axios';
 import useCurrency from '../../store/useCurrency';
 import useToast from '../../store/useToast';
+import { Customer } from '../../types';
 
 export default function CustomerList() {
   const { format } = useCurrency();
   const toast = useToast();
   const [search, setSearch] = useState('');
-  const [customers, setCustomers] = useState([]);
+  const [customers, setCustomers] = useState<Customer[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAddModal, setShowAddModal] = useState(false);
-  const [menuOpenId, setMenuOpenId] = useState(null);
+  const [menuOpenId, setMenuOpenId] = useState<number | string | null>(null);
   const [formData, setFormData] = useState({ name: '', phone: '', address: '', type: 'individual' });
   const [saving, setSaving] = useState(false);
 
@@ -30,7 +31,7 @@ export default function CustomerList() {
   const fetchCustomers = async () => {
     setLoading(true);
     try {
-      const res = await api.get('/customers', { params: { search } });
+      const res = await api.get<any>('/customers', { params: { search } });
       const list = Array.isArray(res) ? res : (res?.customers || res?.data || []);
       setCustomers(list);
     } catch (err) {
@@ -41,7 +42,7 @@ export default function CustomerList() {
     }
   };
 
-  const handleCreate = async (e) => {
+  const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.name.trim()) return toast.error('Mijoz ismi majburiy!');
     setSaving(true);
@@ -51,26 +52,26 @@ export default function CustomerList() {
       setCustomers(prev => [...prev, res]);
       setShowAddModal(false);
       setFormData({ name: '', phone: '', address: '', type: 'individual' });
-    } catch (err) {
+    } catch (err: any) {
       toast.error(typeof err === 'string' ? err : "Mijoz qo'shib bo'lmadi");
     } finally {
       setSaving(false);
     }
   };
 
-  const handleDelete = async (id) => {
+  const handleDelete = async (id: number | string) => {
     if (!window.confirm("Mijozni o'chirmoqchimisiz?")) return;
     try {
       await api.delete(`/customers/${id}`);
       setCustomers(prev => prev.filter(c => c.id !== id));
       toast.success("Mijoz o'chirildi");
-    } catch (err) {
+    } catch (err: any) {
       toast.error(typeof err === 'string' ? err : 'Xatolik yuz berdi');
     }
   };
 
-  const debtCount = customers.filter(c => c.balance < 0).length;
-  const clearCount = customers.filter(c => c.balance >= 0).length;
+  const debtCount = customers.filter(c => (c.balance || 0) < 0).length;
+  const clearCount = customers.filter(c => (c.balance || 0) >= 0).length;
 
   return (
     <div className="fade-in">
@@ -146,9 +147,9 @@ export default function CustomerList() {
                   </td>
                   <td style={{ textAlign:'right', fontWeight:600 }}>{c.totalOrders || 0} ta</td>
                   <td style={{ textAlign:'right', fontWeight:700 }}>
-                    <span style={{ display:'inline-flex', alignItems:'center', gap:'0.25rem', color: c.balance<0?'var(--danger)':c.balance>0?'var(--success)':'var(--text-muted)' }}>
-                      {c.balance<0 ? <TrendingDown size={14}/> : c.balance>0 ? <TrendingUp size={14}/> : <Minus size={14}/>}
-                      {c.balance===0 ? 'Teng' : format(Math.abs(c.balance))}
+                    <span style={{ display:'inline-flex', alignItems:'center', gap:'0.25rem', color: (c.balance || 0) < 0 ? 'var(--danger)' : (c.balance || 0) > 0 ? 'var(--success)' : 'var(--text-muted)' }}>
+                      {(c.balance || 0) < 0 ? <TrendingDown size={14}/> : (c.balance || 0) > 0 ? <TrendingUp size={14}/> : <Minus size={14}/>}
+                      {c.balance === 0 || !c.balance ? 'Teng' : format(Math.abs(c.balance))}
                     </span>
                   </td>
                   <td style={{ textAlign:'right' }}>

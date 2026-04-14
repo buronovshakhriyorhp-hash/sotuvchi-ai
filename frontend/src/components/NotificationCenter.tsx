@@ -11,20 +11,24 @@ const INITIAL = [
   { id:6, type:'success', icon:'sale',   title:'Katta sotuv amalga oshirildi!',     msg:'S-7041 — Qurilish MChJ — 1,200,000 so\'m (Bank)',      time:'3 soat oldin',    read:true,  path: '/products/sales' },
 ];
 
-const ICON_MAP = {
+const ICON_MAP: Record<string, { icon: any; bg: string; color: string }> = {
   alert: { icon: AlertCircle,   bg:'#fee2e2', color:'#dc2626' },
   stock: { icon: Package,       bg:'#fef3c7', color:'#d97706' },
   sale:  { icon: DollarSign,    bg:'#dcfce7', color:'#16a34a' },
   order: { icon: ShoppingCart,  bg:'#e0f2fe', color:'#0284c7' },
 };
 
-export default function NotificationCenter({ onClose }) {
+interface NotificationCenterProps {
+  onClose: () => void;
+}
+
+export default function NotificationCenter({ onClose }: NotificationCenterProps) {
   const navigate = useNavigate();
-  const [notifs, setNotifs] = useState(INITIAL);
+  const [notifs, setNotifs] = useState<any[]>(INITIAL);
 
   const markAll = () => setNotifs(p => p.map(n => ({ ...n, read: true })));
-  const remove  = (id) => setNotifs(p => p.filter(n => n.id !== id));
-  const markAndNavigate = (n) => {
+  const remove  = (id: number | string) => setNotifs(p => p.filter(n => n.id !== id));
+  const markAndNavigate = (n: any) => {
     setNotifs(p => p.map(x => x.id === n.id ? { ...x, read: true } : x));
     if (n.path) {
       navigate(n.path);

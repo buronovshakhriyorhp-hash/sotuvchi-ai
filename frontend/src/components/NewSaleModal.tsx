@@ -8,15 +8,31 @@ import PaymentModal from './PaymentModal';
 import useCurrency from '../store/useCurrency';
 import useToast from '../store/useToast';
 import SearchableSelect from './SearchableSelect';
+import { Product, Customer, User, Sale } from '../types';
 
-export default function NewSaleModal({ onClose, onSaved }) {
+interface SaleItemDraft {
+  productId: number;
+  name: string;
+  qty: number;
+  unit: string;
+  packageQty: number;
+  price: number;
+  total: number;
+}
+
+interface NewSaleModalProps {
+  onClose: () => void;
+  onSaved: (sale: any) => void;
+}
+
+export default function NewSaleModal({ onClose, onSaved }: NewSaleModalProps) {
   const toast = useToast();
   const { format } = useCurrency();
 
-  const [customers, setCustomers] = useState([]);
-  const [warehouses, setWarehouses] = useState([]);
-  const [staff, setStaff] = useState([]);
-  const [items, setItems] = useState([]);
+  const [customers, setCustomers] = useState<Customer[]>([]);
+  const [warehouses, setWarehouses] = useState<any[]>([]); // Using any for warehouses since not in types yet
+  const [staff, setStaff] = useState<User[]>([]);
+  const [items, setItems] = useState<SaleItemDraft[]>([]);
   
   const [customerId, setCustomerId] = useState('');
   const [warehouseId, setWarehouseId] = useState('');
@@ -25,22 +41,22 @@ export default function NewSaleModal({ onClose, onSaved }) {
   const [saleDate, setSaleDate] = useState(new Date().toISOString().substring(0, 10));
 
   const [productSearch, setProductSearch] = useState('');
-  const [suggestions, setSuggestions] = useState([]);
-  const [selectedProduct, setSelectedProduct] = useState(null);
+  const [suggestions, setSuggestions] = useState<Product[]>([]);
+  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [selectedQty, setSelectedQty] = useState('');
 
   const [showAddProduct, setShowAddProduct] = useState(false);
   const [showPayment, setShowPayment] = useState(false);
 
-  const qtyRef = useRef(null);
-  const searchRef = useRef(null);
+  const qtyRef = useRef<HTMLInputElement>(null);
+  const searchRef = useRef<HTMLInputElement>(null);
 
   const fetchAll = async () => {
     try {
       const [custRes, wareRes, staffRes] = await Promise.all([
-        api.get('/customers', { params: { limit: 1000 } }),
-        api.get('/warehouses'),
-        api.get('/staff'),
+        api.get('/customers', { params: { limit: 1000 } }) as Promise<any>,
+        api.get('/warehouses') as Promise<any>,
+        api.get('/staff') as Promise<any>,
       ]);
       setCustomers(Array.isArray(custRes) ? custRes : (custRes?.customers || []));
       const wares = Array.isArray(wareRes) ? wareRes : (wareRes?.warehouses || []);
@@ -59,14 +75,14 @@ export default function NewSaleModal({ onClose, onSaved }) {
     }
     const t = setTimeout(async () => {
       try {
-        const res = await api.get('/products', { params: { search: productSearch, status: 'active', limit: 20 } });
+        const res: any = await api.get('/products', { params: { search: productSearch, status: 'active', limit: 20 } });
         setSuggestions(res?.products || res || []);
       } catch { setSuggestions([]); }
     }, 200);
     return () => clearTimeout(t);
   }, [productSearch]);
 
-  const selectProduct = (product) => {
+  const selectProduct = (product: Product) => {
     setSelectedProduct(product);
     setProductSearch(product.name);
     setSuggestions([]);
@@ -90,9 +106,9 @@ export default function NewSaleModal({ onClose, onSaved }) {
         name: selectedProduct.name,
         qty,
         unit: selectedProduct.unit || 'dona',
-        packageQty: selectedProduct.packageQty || 1,
-        price: selectedProduct.sellPrice,
-        total: qty * selectedProduct.sellPrice,
+        packageQty: 1, // Defaulting packageQty
+        price: selectedProduct.price || selectedProduct.sellPrice || 0,
+        total: qty * (selectedProduct.price || selectedProduct.sellPrice || 0),
       }];
     });
 
@@ -102,9 +118,9 @@ export default function NewSaleModal({ onClose, onSaved }) {
     searchRef.current?.focus();
   };
 
-  const removeItem = (productId) => setItems(prev => prev.filter(i => i.productId !== productId));
+  const removeItem = (productId: number) => setItems(prev => prev.filter(i => i.productId !== productId));
 
-  const updateItemQty = (productId, newQty) => {
+  const updateItemQty = (productId: number, newQty: string) => {
     const q = parseFloat(newQty);
     if (!q || q <= 0) return;
     setItems(prev => prev.map(i => i.productId === productId ? { ...i, qty: q, total: q * i.price } : i));
@@ -116,22 +132,22 @@ export default function NewSaleModal({ onClose, onSaved }) {
     items: items.map(i => ({ productId: i.productId, quantity: i.qty, unitPrice: i.price })),
     warehouseId: warehouseId ? parseInt(warehouseId) : 1,
     customerId: customerId ? parseInt(customerId) : null,
-    paymentMethod: 'cash',
+    paymentMethod: 'cash' as const,
     cashAmount: subtotal,
     cardAmount: 0,
     bankAmount: 0,
     debtAmount: 0,
     discount: 0,
-    discountType: 'percent',
+    discountType: 'percent' as const,
     note,
   });
 
-  const handleSave = async (print = false) => {
+  const handleSave = async (print: boolean = false) => {
     if (items.length === 0) return toast.warning('Savat bo\'sh!');
     if (!warehouseId) return toast.warning('Ombor tanlash shart!');
 
     try {
-      const res = await api.post('/sales', buildPayload());
+      const res: any = await api.post('/sales', buildPayload());
       toast.success("Sotuv saqlandi");
       onSaved(res);
       onClose();
@@ -146,7 +162,7 @@ export default function NewSaleModal({ onClose, onSaved }) {
     setShowPayment(true);
   };
 
-  const handlePaymentConfirmed = (sale, print) => {
+  const handlePaymentConfirmed = (sale: any, print: boolean) => {
     setShowPayment(false);
     onSaved(sale);
     onClose();
@@ -262,10 +278,10 @@ export default function NewSaleModal({ onClose, onSaved }) {
                           placeholder="Mahsulot nomini kiriting yoki izlang..."
                           labelKey="name"
                           valueKey="id"
-                          renderOption={(p) => (
+                          renderOption={(p: Product) => (
                             <div style={{ display:'flex', justifyContent:'space-between', width:'100%' }}>
                               <span style={{ fontWeight: 500 }}>{p.name}</span>
-                              <span style={{ fontWeight: 700, color: 'var(--primary-dark)' }}>{format(p.sellPrice)}</span>
+                              <span style={{ fontWeight: 700, color: 'var(--primary-dark)' }}>{format(p.price || p.sellPrice || 0)}</span>
                             </div>
                           )}
                         />

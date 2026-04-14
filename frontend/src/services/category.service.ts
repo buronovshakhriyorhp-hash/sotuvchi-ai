@@ -1,9 +1,5 @@
 import api from '../api/axios';
-
-export interface Category {
-  id: number;
-  name: string;
-}
+import { Category } from '../types';
 
 class CategoryService {
   async getMany(): Promise<Category[]> {

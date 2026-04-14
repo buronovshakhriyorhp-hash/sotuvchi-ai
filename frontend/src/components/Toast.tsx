@@ -9,21 +9,21 @@ const ICONS = {
   info: Info,
 };
 
-const COLORS = {
+const COLORS: Record<string, string> = {
   success: 'var(--success)',
   error: 'var(--danger)',
   warning: 'var(--warning)',
   info: 'var(--info)',
 };
 
-const Toast = ({ toast }) => {
+const Toast = ({ toast }: { toast: any }) => {
   const removeToast = useToast(state => state.removeToast);
-  const Icon = ICONS[toast.type] || Info;
+  const Icon = (ICONS as any)[toast.type] || Info;
 
   return (
     <div className={`toast-item ${toast.type}`}>
       <div className="toast-icon">
-        <Icon size={18} color={COLORS[toast.type]} />
+        <Icon size={18} color={(COLORS as any)[toast.type]} />
       </div>
       <div className="toast-message">{toast.message}</div>
       <button className="toast-close" onClick={() => removeToast(toast.id)}>

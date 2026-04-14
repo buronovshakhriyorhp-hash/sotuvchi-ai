@@ -8,7 +8,8 @@ async function searchRoutes(fastify) {
     if (!q || q.length < 2) return sendSuccess(reply, []);
 
     const query = q.toLowerCase();
-    const cacheKey = `search:${query}`;
+    const businessId = request.user.businessId;
+    const cacheKey = `search:${businessId}:${query}`;
 
     // Try cache first (search results cached for 2 minutes for frequently searched items)
     const cached = await fastify.cache.get(cacheKey);
@@ -18,6 +19,7 @@ async function searchRoutes(fastify) {
     const [products, customers, sales] = await Promise.all([
       prisma.product.findMany({
         where: {
+          businessId,
           OR: [
             { name: { contains: query, mode: 'insensitive' } },
             { sku: { contains: query, mode: 'insensitive' } },
@@ -28,6 +30,7 @@ async function searchRoutes(fastify) {
       }),
       prisma.customer.findMany({
         where: {
+          businessId,
           OR: [
             { name: { contains: query, mode: 'insensitive' } },
             { phone: { contains: query, mode: 'insensitive' } },
@@ -38,6 +41,7 @@ async function searchRoutes(fastify) {
       }),
       prisma.sale.findMany({
         where: {
+          businessId,
           receiptNo: { contains: query.toUpperCase(), mode: 'insensitive' }
         },
         select: { id: true, receiptNo: true, customerId: true, customer: { select: { name: true } } },

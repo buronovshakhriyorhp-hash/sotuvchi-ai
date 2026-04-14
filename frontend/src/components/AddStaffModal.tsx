@@ -1,8 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import api from '../api/axios';
 import { X, User, Phone, ShieldCheck, Lock, Check, Loader2 } from 'lucide-react';
+import useToast from '../store/useToast';
 
-export default function AddStaffModal({ onClose, onSaved, editStaff }) {
+interface AddStaffModalProps {
+  onClose: () => void;
+  onSaved: () => void;
+  editStaff?: any;
+}
+
+export default function AddStaffModal({ onClose, onSaved, editStaff }: AddStaffModalProps) {
   const [formData, setFormData] = useState({
     name: '',
     phone: '+998',
@@ -24,12 +31,12 @@ export default function AddStaffModal({ onClose, onSaved, editStaff }) {
     }
   }, [editStaff]);
 
-  const handleSubmit = async (e) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     try {
       if (editStaff) {
-        const updateData = { ...formData };
+        const updateData: any = { ...formData };
         if (!updateData.password) delete updateData.password;
         await api.put(`/staff/${editStaff.id}`, updateData);
       } else {
@@ -37,7 +44,7 @@ export default function AddStaffModal({ onClose, onSaved, editStaff }) {
       }
       onSaved();
       onClose();
-    } catch (err) {
+    } catch (err: any) {
       alert(err.response?.data?.error || 'Xatolik yuz berdi');
     } finally {
       setLoading(false);

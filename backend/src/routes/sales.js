@@ -37,8 +37,8 @@ const saleSchema = {
 async function saleRoutes(fastify) {
   // GET /api/sales
   fastify.get('/', { preHandler: [fastify.authenticate] }, async (request, reply) => {
-    const { page = 1, limit = 50, method, status, from, to } = request.query;
-    const cacheKey = `sales:list:${method || 'all'}:${status || 'all'}:${from || 'all'}:${to || 'all'}:${page}:${limit}`;
+    const { page = 1, limit = 50, method, status, from, to, search, today: todayOnly } = request.query;
+    const cacheKey = `sales:list:${method || 'all'}:${status || 'all'}:${from || 'all'}:${to || 'all'}:${search || 'none'}:${todayOnly || 'all'}:${page}:${limit}`;
     
     // Try cache first
     const cached = await fastify.cache.get(cacheKey);
@@ -48,11 +48,25 @@ async function saleRoutes(fastify) {
     const where = {};
     if (method) where.paymentMethod = method;
     if (status) where.status = status;
-    if (from || to) {
+
+    // `today=true` shortcut — kassir kunlik savdolarni ko'rish uchun
+    if (todayOnly === 'true' || todayOnly === '1') {
+      const startOfDay = new Date(); startOfDay.setHours(0, 0, 0, 0);
+      const endOfDay = new Date(); endOfDay.setHours(23, 59, 59, 999);
+      where.createdAt = { gte: startOfDay, lte: endOfDay };
+    } else if (from || to) {
       where.createdAt = {};
       if (from) where.createdAt.gte = new Date(from);
       if (to) where.createdAt.lte = new Date(to + 'T23:59:59');
     }
+    if (search) {
+      where.OR = [
+        { receiptNo: { contains: search, mode: 'insensitive' } },
+        { customer: { name: { contains: search, mode: 'insensitive' } } }
+      ];
+    }
+
+    where.businessId = request.user.businessId;
 
     const [sales, total] = await Promise.all([
       prisma.sale.findMany({
@@ -104,8 +118,8 @@ async function saleRoutes(fastify) {
     const cached = await fastify.cache.get(cacheKey);
     if (cached) return sendSuccess(reply, cached);
 
-    const sale = await prisma.sale.findUnique({
-      where: { id: parseInt(request.params.id) },
+    const sale = await prisma.sale.findFirst({
+      where: { id: parseInt(request.params.id), businessId: request.user.businessId },
       include: {
         cashier: { select: { id: true, name: true } },
         customer: { select: { id: true, name: true, phone: true } },
@@ -126,11 +140,12 @@ async function saleRoutes(fastify) {
   // POST /api/sales
   fastify.post('/', { preHandler: [fastify.authenticate], schema: saleSchema }, async (request, reply) => {
     try {
-      const sale = await SaleService.createSale(request.body, request.user.id);
+      const sale = await SaleService.createSale(request.body, request.user.id, request.user.businessId);
       
-      // Invalidate cache on write
-      await fastify.cache.invalidateEntity('sales');
-      await fastify.cache.invalidateEntity('report');
+      // Invalidate cache on write (businessId majburiy — multi-tenant kesh izolyatsiyasi)
+      const bId = request.user.businessId;
+      await fastify.cache.invalidateEntity('sales', bId);
+      await fastify.cache.invalidateEntity('report', bId);
       
       return sendSuccess(reply, sale, 201);
     } catch (error) {
@@ -142,11 +157,12 @@ async function saleRoutes(fastify) {
   fastify.delete('/:id', { preHandler: [fastify.authenticate] }, async (request, reply) => {
     try {
       const { note } = request.query;
-      const result = await SaleService.cancelSale(parseInt(request.params.id), request.user.id, note);
+      const result = await SaleService.cancelSale(parseInt(request.params.id), request.user.id, request.user.businessId, note);
       
-      // Invalidate cache on delete
-      await fastify.cache.invalidateEntity('sales');
-      await fastify.cache.invalidateEntity('report');
+      // Invalidate cache on delete (businessId majburiy — multi-tenant kesh izolyatsiyasi)
+      const bId = request.user.businessId;
+      await fastify.cache.invalidateEntity('sales', bId);
+      await fastify.cache.invalidateEntity('report', bId);
       await fastify.cache.del(`sale:${request.params.id}`);
       
       return sendSuccess(reply, 'Sotuv muvaffaqiyatli bekor qilindi');

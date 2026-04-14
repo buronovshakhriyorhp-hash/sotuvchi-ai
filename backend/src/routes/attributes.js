@@ -26,6 +26,7 @@ async function attributeRoutes(fastify) {
   // GET /api/attributes
   fastify.get('/', { preHandler: [fastify.authenticate] }, async (request, reply) => {
     const attributes = await prisma.attribute.findMany({
+      where: { businessId: request.user.businessId },
       include: {
         values: true,
       },
@@ -38,7 +39,12 @@ async function attributeRoutes(fastify) {
   fastify.post('/', { preHandler: [fastify.authenticate], schema: attributeSchema }, async (request, reply) => {
     const { name } = request.body;
     try {
-      const attribute = await prisma.attribute.create({ data: { name } });
+      const attribute = await prisma.attribute.create({ 
+        data: { 
+          name, 
+          businessId: request.user.businessId 
+        } 
+      });
       return sendSuccess(reply, attribute, 201);
     } catch {
       return sendError(reply, 'Bu nomli atribut allaqachon mavjud', 400);
@@ -51,6 +57,7 @@ async function attributeRoutes(fastify) {
     const attrValue = await prisma.attributeValue.create({
       data: { 
         attributeId: parseInt(attributeId), 
+        businessId: request.user.businessId,
         value 
       }
     });
@@ -60,7 +67,10 @@ async function attributeRoutes(fastify) {
   // DELETE /api/attributes/:id
   fastify.delete('/:id', { preHandler: [fastify.authenticate] }, async (request, reply) => {
     const id = parseInt(request.params.id);
-    await prisma.attribute.delete({ where: { id } });
+    const result = await prisma.attribute.deleteMany({ 
+      where: { id, businessId: request.user.businessId } 
+    });
+    if (result.count === 0) return sendError(reply, 'Atribut topilmadi', 404);
     return sendSuccess(reply, 'Atribut o\'chirildi');
   });
 }

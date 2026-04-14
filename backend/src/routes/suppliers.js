@@ -19,7 +19,7 @@ const supplierSchema = {
 async function supplierRoutes(fastify) {
   fastify.get('/', { preHandler: [fastify.authenticate] }, async (request, reply) => {
     const { search } = request.query;
-    const where = {};
+    const where = { businessId: request.user.businessId };
     if (search) where.OR = [{ name: { contains: search } }, { phone: { contains: search } }];
     const suppliers = await prisma.supplier.findMany({
       where,
@@ -37,17 +37,26 @@ async function supplierRoutes(fastify) {
 
   fastify.post('/', { preHandler: [fastify.authenticate], schema: supplierSchema }, async (request, reply) => {
     const { name, phone, category, region, address, note } = request.body;
-    const s = await prisma.supplier.create({ data: { name, phone, category, region, address, note } });
+    const s = await prisma.supplier.create({ data: { name, phone, category, region, address, note, businessId: request.user.businessId } });
     return sendSuccess(reply, s, 201);
   });
 
   fastify.put('/:id', { preHandler: [fastify.authenticate] }, async (request, reply) => {
-    const s = await prisma.supplier.update({ where: { id: parseInt(request.params.id) }, data: request.body });
-    return sendSuccess(reply, s);
+    const s = await prisma.supplier.updateMany({ 
+      where: { id: parseInt(request.params.id), businessId: request.user.businessId }, 
+      data: request.body 
+    });
+    if (s.count === 0) return sendError(reply, 'Ta\'minotchi topilmadi', 404);
+    const updated = await prisma.supplier.findUnique({ where: { id: parseInt(request.params.id) } });
+    return sendSuccess(reply, updated);
   });
 
   fastify.delete('/:id', { preHandler: [fastify.authenticate] }, async (request, reply) => {
-    await prisma.supplier.update({ where: { id: parseInt(request.params.id) }, data: { isActive: false } });
+    const result = await prisma.supplier.updateMany({ 
+      where: { id: parseInt(request.params.id), businessId: request.user.businessId }, 
+      data: { isActive: false } 
+    });
+    if (result.count === 0) return sendError(reply, 'Ta\'minotchi topilmadi', 404);
     return sendSuccess(reply, 'Ta\'minotchi o\'chirildi');
   });
 }

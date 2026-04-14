@@ -18,7 +18,7 @@ const orderSchema = {
 async function orderRoutes(fastify) {
   fastify.get('/', { preHandler: [fastify.authenticate] }, async (request, reply) => {
     const { status, search } = request.query;
-    const where = {};
+    const where = { businessId: request.user.businessId };
     if (status) where.status = status;
     if (search) where.customerName = { contains: search };
     const orders = await prisma.order.findMany({ where, orderBy: { createdAt: 'desc' } });
@@ -27,31 +27,42 @@ async function orderRoutes(fastify) {
 
   fastify.post('/', { preHandler: [fastify.authenticate], schema: orderSchema }, async (request, reply) => {
     const { customerName, items, amount, dueDate, note } = request.body;
-    const count = await prisma.order.count();
+    const count = await prisma.order.count({ where: { businessId: request.user.businessId } });
     const orderNo = `ORD-${String(count + 1).padStart(3, '0')}`;
     const order = await prisma.order.create({
-      data: { orderNo, customerName, items: JSON.stringify(items || []), amount: parseFloat(amount), dueDate: dueDate ? new Date(dueDate) : null, note },
+      data: { orderNo, businessId: request.user.businessId, customerName, items: JSON.stringify(items || []), amount: parseFloat(amount), dueDate: dueDate ? new Date(dueDate) : null, note },
     });
     return sendSuccess(reply, order, 201);
   });
 
   fastify.put('/:id/status', { preHandler: [fastify.authenticate] }, async (request, reply) => {
     const { status } = request.body;
-    const order = await prisma.order.update({ where: { id: parseInt(request.params.id) }, data: { status } });
-    return sendSuccess(reply, order);
+    const order = await prisma.order.updateMany({ 
+      where: { id: parseInt(request.params.id), businessId: request.user.businessId }, 
+      data: { status } 
+    });
+    if (order.count === 0) return sendError(reply, 'Buyurtma topilmadi', 404);
+    const updated = await prisma.order.findUnique({ where: { id: parseInt(request.params.id) } });
+    return sendSuccess(reply, updated);
   });
 
   fastify.put('/:id', { preHandler: [fastify.authenticate] }, async (request, reply) => {
     const { customerName, amount, dueDate, note, status } = request.body;
-    const order = await prisma.order.update({
-      where: { id: parseInt(request.params.id) },
+    const order = await prisma.order.updateMany({
+      where: { id: parseInt(request.params.id), businessId: request.user.businessId },
       data: { customerName, amount: amount ? parseFloat(amount) : undefined, dueDate: dueDate ? new Date(dueDate) : undefined, note, status },
     });
-    return sendSuccess(reply, order);
+    if (order.count === 0) return sendError(reply, 'Buyurtma topilmadi', 404);
+    const updated = await prisma.order.findUnique({ where: { id: parseInt(request.params.id) } });
+    return sendSuccess(reply, updated);
   });
 
   fastify.delete('/:id', { preHandler: [fastify.authenticate] }, async (request, reply) => {
-    await prisma.order.update({ where: { id: parseInt(request.params.id) }, data: { status: 'cancelled' } });
+    const result = await prisma.order.updateMany({ 
+      where: { id: parseInt(request.params.id), businessId: request.user.businessId }, 
+      data: { status: 'cancelled' } 
+    });
+    if (result.count === 0) return sendError(reply, 'Buyurtma topilmadi', 404);
     return sendSuccess(reply, 'Buyurtma bekor qilindi');
   });
 }

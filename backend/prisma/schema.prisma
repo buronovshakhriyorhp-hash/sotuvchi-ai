@@ -7,6 +7,62 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+model Business {
+  id                Int             @id @default(autoincrement())
+  name              String
+  slug              String          @unique
+  ownerPhone        String?
+  settings          Json?           // {"storeName": "...", "reportTime": "21:00", "allowReg": "true"}
+  isActive          Boolean         @default(true)
+  isApproved        Boolean         @default(false)
+  approvedAt        DateTime?
+  trialExpiresAt    DateTime?       // Subscription trial expiration
+  plan              String          @default("TRIAL") // TRIAL, PREMIUM, etc.
+  brandingName      String          @default("Nexus ERP")
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+  users             User[]
+  products          Product[]
+  categories        Category[]
+  customers         Customer[]
+  warehouses        Warehouse[]
+  sales             Sale[]
+  debts             Debt[]
+  expenses          Expense[]
+  suppliers         Supplier[]
+  orders            Order[]
+  auditLogs         AuditLog[]
+  productions       Production[]
+  recipes           Recipe[]
+  warehouseTxs      WarehouseTx[]
+  payments          Payment[]
+  attributes        Attribute[]
+  attributeValues   AttributeValue[]
+  feedbacks         Feedback[]
+  rolePermissions   RolePermission[]
+}
+
+model Feedback {
+  id         Int      @id @default(autoincrement())
+  businessId Int
+  userId     Int
+  category   String   // ERROR, SUGGESTION, COMPLAINT
+  content    String
+  status     String   @default("PENDING") // PENDING, READ, RESOLVED
+  createdAt  DateTime @default(now())
+  
+  business   Business @relation(fields: [businessId], references: [id])
+  user       User     @relation(fields: [userId], references: [id])
+}
+
+model PlatformManager {
+  id          Int      @id @default(autoincrement())
+  telegramId  String   @unique
+  name        String
+  permissions Json     // { "canApprove": true, "canViewFeedback": true, ... }
+  createdAt   DateTime @default(now())
+}
+
 model User {
   id           Int           @id @default(autoincrement())
   name         String
@@ -14,35 +70,47 @@ model User {
   passwordHash String
   role         String        @default("CASHIER")
   isActive     Boolean       @default(true)
+  businessId   Int?
+  business     Business?     @relation(fields: [businessId], references: [id])
   createdAt    DateTime      @default(now())
   updatedAt    DateTime      @updatedAt
   auditLogs    AuditLog[]
   expenses     Expense[]
+  feedbacks    Feedback[]
   sales        Sale[]
   warehouseTxs WarehouseTx[]
+  productions  Production[]
+
+  @@index([businessId])
 }
 
 model Category {
-  id       Int       @id @default(autoincrement())
-  name     String    @unique
-  products Product[]
+  id           Int       @id @default(autoincrement())
+  name         String
+  businessId   Int?
+  business     Business? @relation(fields: [businessId], references: [id])
+  products     Product[]
+
+  @@unique([name, businessId])
 }
 
 model Product {
   id             Int                @id @default(autoincrement())
-  sku            String             @unique
+  sku            String
   name           String
   categoryId     Int
+  businessId     Int?
+  business       Business?          @relation(fields: [businessId], references: [id])
   costPrice      Float              @default(0)
   sellPrice      Float              @default(0)
   wholesalePrice Float              @default(0)
-  stock          Int                @default(0)
-  minStock       Int                @default(5)
+  stock          Float              @default(0)  // Float: kg, litr, gramm uchun
+  minStock       Float              @default(5)  // Float: minimum qoldiq ham kasr bo'lishi mumkin
   unit           String             @default("ta")
   packageName    String?
   packageQty     Float?
   packageWeight  Float?
-  barcode        String?            @unique
+  barcode        String?
   image          String?
   isActive       Boolean            @default(true)
   createdAt      DateTime           @default(now())
@@ -52,29 +120,188 @@ model Product {
   stocks         ProductStock[]
   saleItems      SaleItem[]
   warehouseTxs   WarehouseTx[]
+  recipes        Recipe[]           @relation("FinishedProduct")
+  recipeItems    RecipeItem[]       @relation("RawMaterial")
 
+  @@unique([sku, businessId])
+  @@unique([barcode, businessId])
   @@index([name])
   @@index([sku])
-  @@index([barcode])
-  @@index([categoryId])
   @@index([isActive])
-  @@index([createdAt])
-  @@index([isActive, categoryId])
-  @@index([isActive, stock])
 }
 
-model Attribute {
-  id     Int              @id @default(autoincrement())
-  name   String           @unique
-  values AttributeValue[]
+model Customer {
+  id           Int           @id @default(autoincrement())
+  name         String
+  phone        String?
+  businessId   Int?
+  business     Business?     @relation(fields: [businessId], references: [id])
+  type         String        @default("individual")
+  region       String?
+  address      String?
+  note           String?
+  isActive       Boolean       @default(true)
+  telegramChatId String?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+  debts        Debt[]
+  payments       Payment[]
+  sales          Sale[]
+
+  @@index([name])
+  @@index([phone])
+  @@index([businessId])
 }
 
-model AttributeValue {
-  id          Int                @id @default(autoincrement())
-  attributeId Int
-  value       String
-  attribute   Attribute          @relation(fields: [attributeId], references: [id])
-  products    ProductAttribute[]
+model TelegramUser {
+  id                Int       @id @default(autoincrement())
+  telegramId        String    @unique
+  firstName         String?
+  lastName          String?
+  username          String?
+  phone             String?
+  businessId        Int?      // Last active business (legacy/temp)
+  customerId        Int?      // Last active customer (legacy/temp)
+  chatId            String?
+  step              String    @default("START")
+  isReportRecipient Boolean   @default(false)
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+}
+
+model Warehouse {
+  id           Int            @id @default(autoincrement())
+  name         String
+  businessId   Int?
+  business     Business?      @relation(fields: [businessId], references: [id])
+  address      String?
+  isActive     Boolean        @default(true)
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+  stocks       ProductStock[]
+  warehouseTxs WarehouseTx[]
+  sales        Sale[]
+  productions  Production[]
+
+  @@unique([name, businessId])
+}
+
+model Supplier {
+  id         Int       @id @default(autoincrement())
+  name       String
+  phone      String?
+  businessId Int?
+  business   Business? @relation(fields: [businessId], references: [id])
+  category   String?
+  region     String?
+  address    String?
+  note       String?
+  isActive       Boolean   @default(true)
+  telegramChatId String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  debts      Debt[]
+  payments   Payment[]
+
+  @@index([name])
+}
+
+model Sale {
+  id            Int        @id @default(autoincrement())
+  receiptNo     String
+  businessId    Int?
+  business      Business?  @relation(fields: [businessId], references: [id])
+  cashierId     Int
+  customerId    Int?
+  subtotal      Float
+  discount      Float      @default(0)
+  discountAmt   Float      @default(0)
+  total         Float
+  cashAmount    Float      @default(0)
+  cardAmount    Float      @default(0)
+  bankAmount    Float      @default(0)
+  debtAmount    Float      @default(0)
+  paymentMethod String
+  warehouseId   Int        @default(1)
+  status        String     @default("completed")
+  note          String?    @db.Text
+  createdAt     DateTime   @default(now())
+  debt          Debt?
+  cashier       User       @relation(fields: [cashierId], references: [id])
+  customer      Customer?  @relation(fields: [customerId], references: [id])
+  warehouse     Warehouse  @relation(fields: [warehouseId], references: [id])
+  items         SaleItem[]
+  @@unique([receiptNo, businessId])
+  @@index([businessId])
+  @@index([customerId])
+}
+
+model SaleItem {
+  id        Int     @id @default(autoincrement())
+  saleId    Int
+  productId Int
+  quantity  Float   @default(1)
+  unitPrice Float
+  total     Float
+  product   Product @relation(fields: [productId], references: [id])
+  sale      Sale    @relation(fields: [saleId], references: [id])
+
+  @@index([saleId])
+  @@index([productId])
+}
+
+model Debt {
+  id         Int       @id @default(autoincrement())
+  type       String
+  businessId Int?
+  business   Business? @relation(fields: [businessId], references: [id])
+  customerId Int?
+  supplierId Int?
+  saleId     Int?      @unique
+  amount     Float
+  paidAmount Float     @default(0)
+  dueDate    DateTime
+  status     String    @default("pending")
+  note       String?   @db.Text
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+  customer   Customer? @relation(fields: [customerId], references: [id])
+  sale       Sale?     @relation(fields: [saleId], references: [id])
+  supplier   Supplier? @relation(fields: [supplierId], references: [id])
+  payments   Payment[]
+
+  @@index([businessId, status])
+}
+
+model Expense {
+  id          Int      @id @default(autoincrement())
+  amount      Float
+  category    String
+  description String?
+  businessId  Int?
+  business    Business? @relation(fields: [businessId], references: [id])
+  userId      Int
+  date        DateTime @default(now())
+  createdAt   DateTime @default(now())
+  user        User     @relation(fields: [userId], references: [id])
+
+  @@index([businessId])
+  @@index([date])
+}
+
+model Order {
+  id           Int       @id @default(autoincrement())
+  orderNo      String    @unique
+  businessId   Int?
+  business     Business? @relation(fields: [businessId], references: [id])
+  customerName String
+  items        Json
+  amount       Float
+  status       String    @default("new")
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@index([businessId])
 }
 
 model ProductAttribute {
@@ -87,15 +314,24 @@ model ProductAttribute {
   @@unique([productId, attributeValueId])
 }
 
-model Warehouse {
-  id           Int            @id @default(autoincrement())
-  name         String         @unique
-  address      String?
-  isActive     Boolean        @default(true)
-  createdAt    DateTime       @default(now())
-  updatedAt    DateTime       @updatedAt
-  stocks       ProductStock[]
-  warehouseTxs WarehouseTx[]
+model Attribute {
+  id         Int              @id @default(autoincrement())
+  name       String
+  businessId Int?
+  business   Business?        @relation(fields: [businessId], references: [id])
+  values     AttributeValue[]
+
+  @@unique([name, businessId])
+}
+
+model AttributeValue {
+  id          Int                @id @default(autoincrement())
+  attributeId Int
+  businessId  Int?
+  business    Business?          @relation(fields: [businessId], references: [id])
+  value       String
+  attribute   Attribute          @relation(fields: [attributeId], references: [id])
+  products    ProductAttribute[]
 }
 
 model ProductStock {
@@ -109,219 +345,116 @@ model ProductStock {
   @@unique([productId, warehouseId])
 }
 
-model Customer {
-  id           Int           @id @default(autoincrement())
-  name         String
-  phone        String?
-  type         String        @default("individual")
-  region       String?
-  address      String?
-  note         String?
-  isActive     Boolean       @default(true)
-  createdAt    DateTime      @default(now())
-  updatedAt    DateTime      @updatedAt
-  debts        Debt[]
-  payments     Payment[]
-  sales        Sale[]
-  telegramUser TelegramUser?
-
-  @@index([name])
-  @@index([phone])
-  @@index([isActive])
-}
-
-model TelegramUser {
-  id         Int       @id @default(autoincrement())
-  telegramId String    @unique
-  firstName  String?
-  lastName   String?
-  username   String?
-  phone      String?
-  customerId Int?      @unique
-  chatId     String?
-  step       String    @default("START")
-  createdAt  DateTime  @default(now())
-  updatedAt  DateTime  @updatedAt
-  customer   Customer? @relation(fields: [customerId], references: [id])
-}
-
-model Supplier {
-  id        Int       @id @default(autoincrement())
-  name      String
-  phone     String?
-  category  String?
-  region    String?
-  address   String?
-  note      String?
-  isActive  Boolean   @default(true)
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
-  debts     Debt[]
-  payments  Payment[]
-
-  @@index([name])
-  @@index([phone])
-}
-
-model Sale {
-  id            Int        @id @default(autoincrement())
-  receiptNo     String     @unique
-  cashierId     Int
-  customerId    Int?
-  subtotal      Float
-  discount      Float      @default(0)
-  discountAmt   Float      @default(0)
-  total         Float
-  cashAmount    Float      @default(0)
-  cardAmount    Float      @default(0)
-  bankAmount    Float      @default(0)
-  debtAmount    Float      @default(0)
-  paymentMethod String
-  status        String     @default("completed")
-  note          String?
-  createdAt     DateTime   @default(now())
-  debt          Debt?
-  cashier       User       @relation(fields: [cashierId], references: [id])
-  customer      Customer?  @relation(fields: [customerId], references: [id])
-  items         SaleItem[]
-
-  @@index([customerId])
-  @@index([cashierId])
-  @@index([createdAt])
-  @@index([status])
-  @@index([status, createdAt])
-  @@index([paymentMethod, createdAt])
-}
-
-model SaleItem {
-  id        Int     @id @default(autoincrement())
-  saleId    Int
-  productId Int
-  quantity  Float   @default(1)
-  costPrice Float   @default(0)
-  unitPrice Float
-  total     Float
-  product   Product @relation(fields: [productId], references: [id])
-  sale      Sale    @relation(fields: [saleId], references: [id])
-
-  @@index([saleId])
-  @@index([productId])
-}
-
 model WarehouseTx {
   id          Int       @id @default(autoincrement())
   type        String
   productId   Int
   warehouseId Int       @default(1)
   quantity    Float
-  reason      String?
+  businessId  Int?
+  business    Business? @relation(fields: [businessId], references: [id])
   userId      Int
   createdAt   DateTime  @default(now())
   product     Product   @relation(fields: [productId], references: [id])
   user        User      @relation(fields: [userId], references: [id])
   warehouse   Warehouse @relation(fields: [warehouseId], references: [id])
 
+  @@index([businessId])
   @@index([productId])
   @@index([warehouseId])
-  @@index([createdAt])
-  @@index([type])
-}
-
-model Debt {
-  id         Int       @id @default(autoincrement())
-  type       String
-  customerId Int?
-  supplierId Int?
-  saleId     Int?      @unique
-  amount     Float
-  paidAmount Float     @default(0)
-  dueDate    DateTime
-  status     String    @default("pending")
-  note       String?
-  createdAt  DateTime  @default(now())
-  updatedAt  DateTime  @updatedAt
-  customer   Customer? @relation(fields: [customerId], references: [id])
-  sale       Sale?     @relation(fields: [saleId], references: [id])
-  supplier   Supplier? @relation(fields: [supplierId], references: [id])
-  payments   Payment[]
-
-  @@index([customerId])
-  @@index([supplierId])
-  @@index([status])
-  @@index([dueDate])
-  @@index([type, status])
-  @@index([status, dueDate])
 }
 
 model Payment {
   id         Int       @id @default(autoincrement())
   debtId     Int
+  businessId Int?
+  business   Business? @relation(fields: [businessId], references: [id])
   customerId Int?
   supplierId Int?
   amount     Float
   method     String    @default("cash")
-  note       String?
+  note       String?   @db.Text
   createdAt  DateTime  @default(now())
   customer   Customer? @relation(fields: [customerId], references: [id])
   debt       Debt      @relation(fields: [debtId], references: [id])
   supplier   Supplier? @relation(fields: [supplierId], references: [id])
+
+  @@index([businessId])
+  @@index([debtId])
 }
 
-model Order {
-  id           Int       @id @default(autoincrement())
-  orderNo      String    @unique
-  customerName String
-  items        Json
-  amount       Float
-  dueDate      DateTime?
-  status       String    @default("new")
-  note         String?
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
-
-  @@index([status])
-  @@index([createdAt])
+model SystemSetting {
+  id        Int      @id @default(autoincrement())
+  key       String   @unique
+  value     String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model AuditLog {
   id         Int      @id @default(autoincrement())
   userId     Int
+  businessId Int?
+  business   Business? @relation(fields: [businessId], references: [id])
   action     String
   entityType String
   entityId   Int?
   oldData    Json?
   newData    Json?
-  note       String?
   createdAt  DateTime @default(now())
   user       User     @relation(fields: [userId], references: [id])
 
-  @@index([userId])
-  @@index([action])
-  @@index([entityType])
-  @@index([entityId])
+  @@index([businessId])
   @@index([createdAt])
-}
-
-model Expense {
-  id          Int      @id @default(autoincrement())
-  amount      Float
-  category    String
-  description String?
-  date        DateTime @default(now())
-  userId      Int
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  user        User     @relation(fields: [userId], references: [id])
-
-  @@index([category])
-  @@index([date])
-  @@index([userId])
-  @@index([category, date])
 }
 
 model RolePermission {
   id          Int      @id @default(autoincrement())
-  role        String   @unique
+  role        String
+  businessId  Int
   permissions Json
   updatedAt   DateTime @updatedAt
+
+  business    Business @relation(fields: [businessId], references: [id])
+
+  @@unique([role, businessId])
+  @@index([businessId])
+}
+
+model Recipe {
+  id          Int          @id @default(autoincrement())
+  name        String
+  productId   Int
+  businessId  Int?
+  business    Business?    @relation(fields: [businessId], references: [id])
+  product     Product      @relation("FinishedProduct", fields: [productId], references: [id])
+  items       RecipeItem[]
+  productions Production[]
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+}
+
+model RecipeItem {
+  id        Int     @id @default(autoincrement())
+  recipeId  Int
+  productId Int
+  quantity  Float
+  recipe    Recipe  @relation(fields: [recipeId], references: [id])
+  product   Product @relation("RawMaterial", fields: [productId], references: [id])
+}
+
+model Production {
+  id          Int       @id @default(autoincrement())
+  recipeId    Int
+  businessId  Int?
+  business    Business? @relation(fields: [businessId], references: [id])
+  quantity    Float
+  status      String    @default("completed")
+  userId      Int
+  warehouseId Int
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  recipe      Recipe    @relation(fields: [recipeId], references: [id])
+  user        User      @relation(fields: [userId], references: [id])
+  warehouse   Warehouse @relation(fields: [warehouseId], references: [id])
 }

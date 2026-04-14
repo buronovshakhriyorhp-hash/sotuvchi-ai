@@ -8,9 +8,29 @@ import api from '../../api/axios';
 import NewSaleModal from '../../components/NewSaleModal';
 import useCurrency from '../../store/useCurrency';
 import useToast from '../../store/useToast';
+import { Sale, Customer, User } from '../../types';
+
+// Extend Sale for UI specific fields if needed
+interface SalesListItem extends Sale {
+  receiptNo: string;
+  debtAmount: number;
+  cashAmount: number;
+  cardAmount: number;
+  bankAmount: number;
+  discountAmt: number;
+  note?: string;
+  cashier?: User; // Keeping it as it might be in the API response
+}
+
+interface Column {
+  key: string;
+  label: string;
+  align: 'left' | 'right' | 'center';
+  default: boolean;
+}
 
 // ===== 22 TA USTUN KONFIGURATSIYASI =====
-const ALL_COLUMNS = [
+const ALL_COLUMNS: Column[] = [
   { key: 'index', label: '#', align: 'left', default: true },
   { key: 'customer', label: 'Mijoz', align: 'left', default: true },
   { key: 'receiptNo', label: 'Sotuv', align: 'left', default: true },
@@ -37,7 +57,7 @@ const ALL_COLUMNS = [
 
 const STORAGE_KEY = 'nexus_sales_columns';
 
-function getInitialColumns() {
+function getInitialColumns(): string[] {
   try {
     const stored = localStorage.getItem(STORAGE_KEY);
     if (stored) return JSON.parse(stored);
@@ -45,9 +65,15 @@ function getInitialColumns() {
   return ALL_COLUMNS.filter(c => c.default).map(c => c.key);
 }
 
+interface ColumnSettingsProps {
+  visibleColumns: string[];
+  setVisibleColumns: React.Dispatch<React.SetStateAction<string[]>>;
+  onClose: () => void;
+}
+
 // ===== COLUMN SETTINGS PANEL =====
-function ColumnSettingsPanel({ visibleColumns, setVisibleColumns, onClose }) {
-  const toggle = (key) => {
+function ColumnSettingsPanel({ visibleColumns, setVisibleColumns, onClose }: ColumnSettingsProps) {
+  const toggle = (key: string) => {
     setVisibleColumns(prev => {
       const next = prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key];
       localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
@@ -121,6 +147,46 @@ function ColumnSettingsPanel({ visibleColumns, setVisibleColumns, onClose }) {
           </div>
         </div>
 
+        {/* Body */}
+        <div className="modal-body" style={{ padding: 0 }}>
+          {/* Action bar */}
+          <div style={{ padding: '0.75rem 1.5rem', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--surface-2)' }}>
+            <span style={{ fontSize: '0.8125rem', color: 'var(--primary-dark)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Ustunni o'chirish / yoqish</span>
+            <div style={{ display: 'flex', gap: '0.5rem' }}>
+              <button className="btn btn-outline btn-sm" onClick={selectAll}>Hammasini yoqish</button>
+              <button className="btn btn-ghost btn-sm" onClick={resetAll} style={{ color: 'var(--primary-dark)' }}>
+                <RefreshCw size={12}/> Standart
+              </button>
+            </div>
+          </div>
+          
+          {/* Columns list */}
+          <div style={{ padding: '0.5rem 1.5rem', maxHeight: 450, overflowY: 'auto' }}>
+            {ALL_COLUMNS.map(col => {
+              const isOn = visibleColumns.includes(col.key);
+              return (
+                <div key={col.key} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.75rem 0', borderBottom: '1px solid var(--border)' }}>
+                  <span style={{ fontWeight: 500, color: isOn ? 'var(--text)' : 'var(--text-muted)', fontSize: '0.875rem' }}>{col.label}</span>
+                  <div 
+                    onClick={() => toggle(col.key)}
+                    style={{
+                      width: 40, height: 22, borderRadius: 11,
+                      background: isOn ? 'var(--primary)' : 'var(--border-strong)',
+                      position: 'relative', cursor: 'pointer', transition: 'background 0.2s', flexShrink: 0
+                    }}
+                  >
+                    <div style={{
+                      position: 'absolute', top: 2, left: isOn ? 20 : 2,
+                      width: 18, height: 18, borderRadius: '50%', background: '#fff',
+                      transition: 'left 0.2s', boxShadow: '0 1px 3px rgba(0,0,0,0.2)'
+                    }} />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
         {/* Footer */}
         <div className="modal-footer">
           <button className="btn btn-outline" onClick={onClose}>Yopish</button>
@@ -130,8 +196,16 @@ function ColumnSettingsPanel({ visibleColumns, setVisibleColumns, onClose }) {
   );
 }
 
+interface CellValueProps {
+  col: Column;
+  sale: SalesListItem;
+  idx: number;
+  format: (n: number) => string;
+  formatDate: (d: any) => string;
+}
+
 // ===== CELL RENDERER =====
-function CellValue({ col, sale, idx, format, formatDate }) {
+function CellValue({ col, sale, idx, format, formatDate }: CellValueProps) {
   switch (col.key) {
     case 'index': return <span style={{ color: 'var(--text-muted)', fontWeight: 500 }}>{idx + 1}</span>;
     case 'customer': return sale.customer?.name 
@@ -139,20 +213,20 @@ function CellValue({ col, sale, idx, format, formatDate }) {
       : <span style={{ color: 'var(--text-muted)' }}>Chakana mijoz</span>;
     case 'receiptNo': return <span style={{ color: 'var(--primary-dark)', fontWeight: 700 }}>#{sale.receiptNo}</span>;
     case 'status': {
-      const st = sale.status || 'completed';
-      return <span className={`badge ${st === 'completed' ? 'badge-active' : st === 'cancelled' ? 'badge-danger' : 'badge-warning'}`} style={{ fontSize: '0.7rem' }}>
-        {st === 'completed' ? <><CheckCircle2 size={10}/> Yakunlangan</> : st === 'cancelled' ? 'Bekor' : <><Clock size={10}/> Kutilmoqda</>}
+      const st = sale.status || 'COMPLETED';
+      return <span className={`badge ${st === 'COMPLETED' ? 'badge-active' : st === 'CANCELLED' ? 'badge-danger' : 'badge-warning'}`} style={{ fontSize: '0.7rem' }}>
+        {st === 'COMPLETED' ? <><CheckCircle2 size={10}/> Yakunlangan</> : st === 'CANCELLED' ? 'Bekor' : <><Clock size={10}/> Kutilmoqda</>}
       </span>;
     }
     case 'paymentStatus': return <span className={`badge ${sale.debtAmount > 0 ? 'badge-warning' : 'badge-active'}`} style={{ fontSize: '0.7rem' }}>
       {sale.debtAmount > 0 ? 'Qisman' : "To'liq"}
     </span>;
-    case 'staff': return <span style={{ color: 'var(--text-secondary)' }}>{sale.cashier?.name || '-'}</span>;
-    case 'total': return <span style={{ fontWeight: 800, color: 'var(--success)' }}>{format(sale.total || 0)}</span>;
+    case 'staff': return <span style={{ color: 'var(--text-secondary)' }}>{sale.cashier?.name || sale.user?.name || '-'}</span>;
+    case 'total': return <span style={{ fontWeight: 800, color: 'var(--success)' }}>{format(sale.totalAmount || 0)}</span>;
     case 'productImage': return <div style={{ width: 32, height: 32, borderRadius: 'var(--radius-sm)', background: 'var(--surface-2)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto' }}>
       <Eye size={14} color="var(--text-muted)" />
     </div>;
-    case 'payment': return <span style={{ fontWeight: 700 }}>{format(sale.total || 0)}</span>;
+    case 'payment': return <span style={{ fontWeight: 700 }}>{format(sale.totalAmount || 0)}</span>;
     case 'cash': return <span style={{ color: '#16a34a' }}>{format(sale.cashAmount || 0)}</span>;
     case 'card': return <span style={{ color: '#0284c7' }}>{format(sale.cardAmount || 0)}</span>;
     case 'bankTransfer': return <span style={{ color: 'var(--text-muted)' }}>{format(sale.bankAmount || 0)}</span>;
@@ -162,7 +236,7 @@ function CellValue({ col, sale, idx, format, formatDate }) {
     case 'discount': return <span style={{ color: 'var(--text-muted)' }}>{format(sale.discountAmt || 0)}</span>;
     case 'loyaltyExpense': return <span style={{ color: 'var(--text-muted)' }}>0</span>;
     case 'loyaltyTransfer': return <span style={{ color: 'var(--text-muted)' }}>0</span>;
-    case 'seller': return <span style={{ color: 'var(--text-secondary)' }}>{sale.cashier?.name || '-'}</span>;
+    case 'seller': return <span style={{ color: 'var(--text-secondary)' }}>{sale.cashier?.name || sale.user?.name || '-'}</span>;
     case 'note': return <span style={{ maxWidth: 120, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'block', color: 'var(--text-muted)', fontSize: '0.75rem' }}>{sale.note || '-'}</span>;
     case 'saleType': return <span className="badge badge-info" style={{ fontSize: '0.7rem' }}>Savdo</span>;
     case 'createdAt': return <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>{formatDate(sale.createdAt)}</span>;
@@ -176,13 +250,13 @@ export default function SalesList() {
   const navigate = useNavigate();
   const { format } = useCurrency();
 
-  const [sales, setSales] = useState([]);
+  const [sales, setSales] = useState<SalesListItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [showModal, setShowModal] = useState(false);
   const [showColumnSettings, setShowColumnSettings] = useState(false);
-  const [visibleColumns, setVisibleColumns] = useState(getInitialColumns);
+  const [visibleColumns, setVisibleColumns] = useState<string[]>(getInitialColumns);
   const [perPage, setPerPage] = useState(10);
 
   const todayStr = new Date().toISOString().slice(0, 10);
@@ -194,7 +268,7 @@ export default function SalesList() {
   const fetchSales = async () => {
     setLoading(true);
     try {
-      const res = await api.get('/sales', { params: { from: fromDate, to: toDate, limit: 1000 } });
+      const res: any = await api.get('/sales', { params: { from: fromDate, to: toDate, limit: 1000 } });
       setSales(res?.sales || res || []);
     } catch (err) {
       console.error(err);
@@ -207,21 +281,21 @@ export default function SalesList() {
     const matchSearch = String(s.receiptNo).toLowerCase().includes(search.toLowerCase()) ||
                         (s.customer?.name || '').toLowerCase().includes(search.toLowerCase()) ||
                         (s.cashier?.name || '').toLowerCase().includes(search.toLowerCase());
-    const statusVal = s.status || 'completed';
+    const statusVal = s.status || 'COMPLETED';
     const matchStatus = statusFilter === 'all' || statusVal === statusFilter;
     return matchSearch && matchStatus;
   });
 
   const displayed = filtered.slice(0, perPage);
 
-  const totalRevenue = filtered.reduce((a, b) => a + (b.total || 0), 0);
-  const totalPaid = filtered.reduce((a, b) => a + (b.total || 0), 0);
+  const totalRevenue = filtered.reduce((a, b) => a + (b.totalAmount || 0), 0);
+  const totalPaid = filtered.reduce((a, b) => a + (b.totalAmount || 0), 0);
   const totalCash = filtered.reduce((a, b) => a + (b.cashAmount || 0), 0);
   const totalCard = filtered.reduce((a, b) => a + (b.cardAmount || 0), 0);
   const totalDebt = filtered.reduce((a, b) => a + (b.debtAmount || 0), 0);
   const totalDiscount = filtered.reduce((a, b) => a + (b.discountAmt || 0), 0);
 
-  const formatDate = (d) => {
+  const formatDate = (d: any) => {
     return new Date(d).toLocaleString('uz-UZ', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
   };
 
@@ -238,11 +312,11 @@ export default function SalesList() {
         case 'index': return i + 1;
         case 'customer': return s.customer?.name || 'Chakana';
         case 'receiptNo': return s.receiptNo || '';
-        case 'status': return s.status === 'completed' ? 'Yakunlangan' : s.status === 'cancelled' ? 'Bekor' : 'Kutilmoqda';
+        case 'status': return s.status === 'COMPLETED' ? 'Yakunlangan' : s.status === 'CANCELLED' ? 'Bekor' : 'Kutilmoqda';
         case 'paymentStatus': return s.debtAmount > 0 ? 'Qisman' : "To'liq";
-        case 'staff': return s.cashier?.name || '-';
-        case 'total': return s.total || 0;
-        case 'payment': return s.total || 0;
+        case 'staff': return s.cashier?.name || s.user?.name || '-';
+        case 'total': return s.totalAmount || 0;
+        case 'payment': return s.totalAmount || 0;
         case 'cash': return s.cashAmount || 0;
         case 'card': return s.cardAmount || 0;
         case 'bankTransfer': return s.bankAmount || 0;

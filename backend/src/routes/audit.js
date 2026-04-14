@@ -12,7 +12,7 @@ async function auditRoutes(fastify) {
     const { page = 1, limit = 50, action, entityType, userId } = request.query;
     const skip = (parseInt(page) - 1) * parseInt(limit);
 
-    const where = {};
+    const where = { businessId: request.user.businessId };
     if (action) where.action = action;
     if (entityType) where.entityType = entityType;
     if (userId) where.userId = parseInt(userId);
@@ -41,11 +41,11 @@ async function auditRoutes(fastify) {
     
     const [criticalActions, activeUsers] = await Promise.all([
       prisma.auditLog.count({
-        where: { createdAt: { gte: last24h }, action: { in: ['DELETE_SALE', 'DELETE_PRODUCT', 'UPDATE_PRODUCT'] } }
+        where: { businessId: request.user.businessId, createdAt: { gte: last24h }, action: { in: ['DELETE_SALE', 'DELETE_PRODUCT', 'UPDATE_PRODUCT'] } }
       }),
       prisma.auditLog.groupBy({
         by: ['userId'],
-        where: { createdAt: { gte: last24h } },
+        where: { businessId: request.user.businessId, createdAt: { gte: last24h } },
         _count: { id: true }
       })
     ]);

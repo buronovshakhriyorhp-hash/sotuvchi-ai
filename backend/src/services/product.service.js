@@ -3,9 +3,9 @@ const cache = require('../utils/cache');
 const { logAction } = require('./audit.service');
 
 class ProductService {
-  async getAllProducts(query) {
+  async getAllProducts(query, businessId) {
     const { search, categoryId, status, page = 1, limit = 50 } = query;
-    const cacheKey = `products:list:${search || 'all'}:${categoryId || 'all'}:${status || 'all'}:${page}:${limit}`;
+    const cacheKey = `products:list:${businessId}:${search || 'all'}:${categoryId || 'all'}:${status || 'all'}:${page}:${limit}`;
     
     // Try cache first (cache list queries for 5 minutes)
     const cached = await cache.get(cacheKey);
@@ -13,7 +13,7 @@ class ProductService {
 
     const skip = (parseInt(page) - 1) * parseInt(limit);
 
-    const where = {};
+    const where = { businessId };
     if (search) where.OR = [
       { name: { contains: search, mode: 'insensitive' } },
       { sku: { contains: search, mode: 'insensitive' } },
@@ -58,20 +58,19 @@ class ProductService {
     return result;
   }
 
-  async getProductById(id) {
-    const cacheKey = `product:${id}`;
+  async getProductById(id, businessId) {
+    const cacheKey = `product:${businessId}:${id}`;
     
     // Try cache first
     const cached = await cache.get(cacheKey);
     if (cached) return cached;
 
-    const product = await prisma.product.findUnique({
-      where: { id: parseInt(id) },
+    const product = await prisma.product.findFirst({
+      where: { id: parseInt(id), businessId },
       include: { 
         category: { select: { id: true, name: true } },
         stocks: { 
-          include: { warehouse: { select: { id: true, name: true } } },
-          select: { id: true, quantity: true, warehouse: true }
+          include: { warehouse: { select: { id: true, name: true } } }
         } 
       },
     });
@@ -82,7 +81,7 @@ class ProductService {
     return product;
   }
 
-  async createProduct(data, userId, imageUrl = null) {
+  async createProduct(data, userId, businessId, imageUrl = null) {
     const { 
       sku, name, categoryId, costPrice, sellPrice, wholesalePrice, stock, minStock, unit, barcode,
       packageName, packageQty, packageWeight, warehouseId
@@ -91,13 +90,15 @@ class ProductService {
     const parsedSku = String(sku || '').trim();
     if (!parsedSku) throw Object.assign(new Error('SKU kiritilishi shart'), { statusCode: 400 });
 
-    // Check duplicate SKU
-    const existing = await prisma.product.findFirst({ where: { sku: parsedSku } });
+    // Check duplicate SKU (SaaS scoped)
+    const existing = await prisma.product.findFirst({ where: { sku: parsedSku, businessId } });
     if (existing) throw Object.assign(new Error(`Bu SKU (${parsedSku}) allaqachon mavjud`), { statusCode: 400 });
 
-    if (barcode) {
-      const barcodeExists = await prisma.product.findFirst({ where: { barcode: String(barcode) } });
-      if (barcodeExists) throw Object.assign(new Error(`Bu barcode (${barcode}) allaqachon mavjud`), { statusCode: 400 });
+    const parsedBarcode = barcode && String(barcode).trim() ? String(barcode).trim() : null;
+
+    if (parsedBarcode) {
+      const barcodeExists = await prisma.product.findFirst({ where: { barcode: parsedBarcode, businessId } });
+      if (barcodeExists) throw Object.assign(new Error(`Bu barcode (${parsedBarcode}) allaqachon mavjud`), { statusCode: 400 });
     }
 
     const parsedStock = parseFloat(stock);
@@ -108,6 +109,7 @@ class ProductService {
         data: {
           sku: parsedSku,
           name: String(name),
+          businessId,
           categoryId: parseInt(categoryId),
           costPrice: parseFloat(costPrice) || 0,
           sellPrice: parseFloat(sellPrice) || 0,
@@ -115,7 +117,7 @@ class ProductService {
           stock: finalStock,
           minStock: parseFloat(minStock) || 5,
           unit: unit || 'ta',
-          barcode: barcode ? String(barcode) : null,
+          barcode: parsedBarcode,
           packageName: packageName ? String(packageName) : null,
           packageQty: packageQty ? parseFloat(packageQty) : null,
           packageWeight: packageWeight ? parseFloat(packageWeight) : null,
@@ -128,7 +130,7 @@ class ProductService {
       // Stock handling
       let targetWarehouseId = parseInt(warehouseId);
       if (!targetWarehouseId) {
-        const defaultWarehouse = await tx.warehouse.findFirst({ where: { isActive: true }, orderBy: { id: 'asc' } });
+        const defaultWarehouse = await tx.warehouse.findFirst({ where: { isActive: true, businessId }, orderBy: { id: 'asc' } });
         if (defaultWarehouse) targetWarehouseId = defaultWarehouse.id;
       }
 
@@ -155,7 +157,6 @@ class ProductService {
               productId: product.id,
               warehouseId: targetWarehouseId,
               quantity: Math.abs(finalStock),
-              reason: 'Mahsulot yaratishdagi dastlabki qoldiq',
               userId
             }
           });
@@ -164,6 +165,7 @@ class ProductService {
 
       logAction({
         userId,
+        businessId,
         action: 'CREATE_PRODUCT',
         entityType: 'Product',
         entityId: product.id,
@@ -171,25 +173,25 @@ class ProductService {
       });
 
       // Invalidate cache
-      await cache.invalidateEntity('products');
+      await cache.invalidateEntity('products', businessId);
 
       return product;
     });
   }
 
-  async updateProduct(id, data, userId, imageUrl = undefined) {
+  async updateProduct(id, data, userId, businessId, imageUrl = undefined) {
     const { sku, name, categoryId, costPrice, sellPrice, wholesalePrice, stock, minStock, unit, barcode,
             packageName, packageQty, packageWeight, isActive, warehouseId } = data;
 
-    const oldProduct = await prisma.product.findUnique({ 
-      where: { id: parseInt(id) },
+    const oldProduct = await prisma.product.findFirst({ 
+      where: { id: parseInt(id), businessId },
       include: { stocks: true }
     });
     if (!oldProduct) throw Object.assign(new Error('Mahsulot topilmadi'), { statusCode: 404 });
 
-    // Handle SKU update
+    // Handle SKU update (SaaS scoped)
     if (sku && sku !== oldProduct.sku) {
-      const existing = await prisma.product.findFirst({ where: { sku: String(sku), NOT: { id: parseInt(id) } } });
+      const existing = await prisma.product.findFirst({ where: { sku: String(sku), businessId, NOT: { id: parseInt(id) } } });
       if (existing) throw Object.assign(new Error(`Bu SKU (${sku}) boshqa mahsulotda mavjud`), { statusCode: 400 });
     }
 
@@ -208,8 +210,13 @@ class ProductService {
       ...(packageQty !== undefined && { packageQty: packageQty ? parseFloat(packageQty) : null }),
       ...(packageWeight !== undefined && { packageWeight: packageWeight ? parseFloat(packageWeight) : null }),
       ...(isActive !== undefined && { isActive: isActive === 'true' || isActive === true }),
-      ...(imageUrl !== undefined && { image: imageUrl }),
+      ...(imageUrl && { image: imageUrl }),
     };
+
+    // Explicitly delete image if requested (optional feature for future)
+    if (data.deleteImage === 'true' || data.deleteImage === true) {
+        updateData.image = null;
+    }
 
     return await prisma.$transaction(async (tx) => {
       const product = await tx.product.update({
@@ -224,7 +231,7 @@ class ProductService {
         let targetWarehouseId = parseInt(warehouseId);
         
         if (!targetWarehouseId) {
-          const defaultWarehouse = await tx.warehouse.findFirst({ where: { isActive: true }, orderBy: { id: 'asc' } });
+          const defaultWarehouse = await tx.warehouse.findFirst({ where: { isActive: true, businessId }, orderBy: { id: 'asc' } });
           if (defaultWarehouse) targetWarehouseId = defaultWarehouse.id;
         }
 
@@ -254,7 +261,6 @@ class ProductService {
                 productId: product.id,
                 warehouseId: targetWarehouseId,
                 quantity: Math.abs(diff),
-                reason: 'Mahsulot tahrirlash paytidagi qoldiqni to\'g\'rilash',
                 userId
               }
             });
@@ -275,6 +281,7 @@ class ProductService {
 
       logAction({
         userId,
+        businessId,
         action: 'UPDATE_PRODUCT',
         entityType: 'Product',
         entityId: product.id,
@@ -283,15 +290,15 @@ class ProductService {
       });
 
       // Invalidate cache
-      await cache.invalidateEntity('products');
-      await cache.del(`product:${id}`);
+      await cache.invalidateEntity('products', businessId);
+      await cache.del(`product:${businessId}:${id}`);
 
       return product;
     });
   }
 
-  async deleteProduct(id, userId) {
-    const oldProduct = await prisma.product.findUnique({ where: { id: parseInt(id) } });
+  async deleteProduct(id, userId, businessId) {
+    const oldProduct = await prisma.product.findFirst({ where: { id: parseInt(id), businessId } });
     if (!oldProduct) throw Object.assign(new Error('Mahsulot topilmadi'), { statusCode: 404 });
 
     return await prisma.$transaction(async (tx) => {
@@ -300,6 +307,7 @@ class ProductService {
       await tx.auditLog.create({
         data: {
           userId,
+          businessId,
           action: 'DELETE_PRODUCT',
           entityType: 'Product',
           entityId: id,
@@ -309,8 +317,8 @@ class ProductService {
       });
 
       // Invalidate cache
-      await cache.invalidateEntity('products');
-      await cache.del(`product:${id}`);
+      await cache.invalidateEntity('products', businessId);
+      await cache.del(`product:${businessId}:${id}`);
 
       return product;
     });

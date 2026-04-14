@@ -1,22 +1,34 @@
 const prisma = require('../prisma');
+const { Prisma } = require('@prisma/client');
 const botService = require('./bot.service');
 const { logAction } = require('./audit.service');
+const stockService = require('./stock.service');
 
 class SaleService {
   /**
    * Generates a unique receipt number in a thread-safe way (to be used within a transaction)
    * Format: S-00001
    */
-  async generateReceiptNo(tx) {
-    const lastSale = await tx.sale.findFirst({
-      orderBy: { id: 'desc' },
-      select: { id: true }
-    });
-    const nextId = (lastSale?.id || 0) + 1;
-    return `S-${String(nextId).padStart(5, '0')}`;
+  async generateReceiptNo(tx, businessId) {
+    // Use timestamp + random suffix for guaranteed uniqueness under concurrency
+    const timestamp = Date.now();
+    const random = Math.floor(Math.random() * 1000).toString().padStart(3, '0');
+    const candidate = `S-${timestamp}-${random}`;
+    
+    // Verify it doesn't already exist for THIS business
+    const existing = await tx.sale.findFirst({ where: { receiptNo: candidate, businessId } });
+    if (existing) {
+      // Fallback: use last id + 1
+      const lastSale = await tx.sale.findFirst({
+        orderBy: { id: 'desc' },
+        select: { id: true }
+      });
+      return `S-${String((lastSale?.id || 0) + 1).padStart(5, '0')}-${random}`;
+    }
+    return candidate;
   }
 
-  async createSale(data, userId) {
+  async createSale(data, userId, businessId) {
     const {
       items, customerId, warehouseId,
       discount = 0, discountType = 'percent',
@@ -25,12 +37,38 @@ class SaleService {
       note
     } = data;
 
+    if (!Array.isArray(items) || items.length === 0) {
+      throw Object.assign(new Error('Sotuv uchun mahsulotlar tanlanmagan'), { statusCode: 400 });
+    }
+
+    for (const item of items) {
+      if (!item.productId || isNaN(item.quantity) || item.quantity <= 0) {
+        throw Object.assign(new Error('Mahsulot miqdori noto\'g\'ri kiritilgan'), { statusCode: 400 });
+      }
+    }
+
     return await prisma.$transaction(async (tx) => {
-      // 1. Validate products and stocks
-      const productIds = items.map(i => i.productId);
-      const products = await tx.product.findMany({ where: { id: { in: productIds } } });
+      // 1. Validate products and stocks with Row-Level Locking (FOR UPDATE)
+      // Sorting IDs prevents deadlocks in high-concurrency environments
+      const sortedProductIds = [...new Set(items.map(i => i.productId))].sort((a, b) => a - b);
+
+      // PostgreSQL ANY() sintaksisi — Prisma.sql bilan to'g'ri ishlatiladi
+      // tx.join() Prisma'da mavjud emas — bu kritik xato edi
+      await tx.$queryRaw(Prisma.sql`
+        SELECT id FROM "Product" 
+        WHERE id = ANY(${sortedProductIds}::int[]) AND "businessId" = ${businessId} 
+        FOR UPDATE
+      `);
+
+      await tx.$queryRaw(Prisma.sql`
+        SELECT id FROM "ProductStock" 
+        WHERE "productId" = ANY(${sortedProductIds}::int[]) AND "warehouseId" = ${parseInt(warehouseId)} 
+        FOR UPDATE
+      `);
+
+      const products = await tx.product.findMany({ where: { id: { in: sortedProductIds }, businessId } });
       const stocks = await tx.productStock.findMany({
-        where: { warehouseId: parseInt(warehouseId), productId: { in: productIds } }
+        where: { warehouseId: parseInt(warehouseId), productId: { in: sortedProductIds } }
       });
 
       for (const item of items) {
@@ -43,6 +81,17 @@ class SaleService {
         if (currentQty < item.quantity) {
           throw Object.assign(new Error(`${prod.name}dan tanlangan omborda yetarli emas. Mavjud: ${currentQty}`), { statusCode: 400 });
         }
+      }
+
+      // 1b. Qarz validatsiyasi: mijoz tanlanmasa qarzga sotib bo'lmaydi
+      // Bu backend himoyasi — frontend allaqachon bloklaydi
+      const hasDebt = paymentMethod === 'debt' ||
+        (paymentMethod === 'mixed' && parseFloat(debtAmount) > 0);
+      if (hasDebt && !customerId) {
+        throw Object.assign(
+          new Error("Qarzga sotish uchun mijoz tanlash majburiy!"),
+          { statusCode: 400 }
+        );
       }
 
       // 2. Calculate totals (using 2 decimal places precision)
@@ -81,51 +130,42 @@ class SaleService {
       }
 
       // 3. Generate Receipt Number
-      const receiptNo = await this.generateReceiptNo(tx);
+      const receiptNo = await this.generateReceiptNo(tx, businessId);
 
       // 4. Save Sale
       const sale = await tx.sale.create({
         data: {
           receiptNo,
+          businessId,
           cashierId: userId,
           customerId: customerId ? parseInt(customerId) : null,
           subtotal,
           discount: discountType === 'percent' ? parseFloat(discount) : 0,
           discountAmt,
           total,
-          cashAmount: paymentMethod === 'cash' ? total : cashAmount,
-          cardAmount: paymentMethod === 'card' ? total : cardAmount,
-          bankAmount: paymentMethod === 'bank' ? total : bankAmount,
-          debtAmount: paymentMethod === 'debt' ? total : debtAmount,
+          cashAmount: paymentMethod === 'cash' ? total : parseFloat(cashAmount) || 0,
+          cardAmount: paymentMethod === 'card' ? total : parseFloat(cardAmount) || 0,
+          bankAmount: paymentMethod === 'bank' ? total : parseFloat(bankAmount) || 0,
+          debtAmount: paymentMethod === 'debt' ? total : parseFloat(debtAmount) || 0,
           paymentMethod,
-          note,
+          warehouseId: parseInt(warehouseId),
           items: { create: saleItemsData },
         },
-        include: { items: true, customer: true },
+        include: { items: true, customer: { select: { id: true, name: true } } },
       });
 
       // 5. Update Stocks and Create Transactions
+      // businessId qo'shildi — adjustStock() SaaS tekshiruvi uchun zarur
       for (const item of items) {
-        await tx.productStock.update({
-          where: { productId_warehouseId: { productId: item.productId, warehouseId: parseInt(warehouseId) } },
-          data: { quantity: { decrement: item.quantity } },
-        });
-
-        await tx.product.update({
-          where: { id: item.productId },
-          data: { stock: { decrement: item.quantity } },
-        });
-
-        await tx.warehouseTx.create({
-          data: {
-            type: 'OUT',
-            productId: item.productId,
-            warehouseId: parseInt(warehouseId),
-            quantity: item.quantity,
-            reason: `Sotuv #${receiptNo}`,
-            userId: userId
-          },
-        });
+        await stockService.adjustStock({
+          productId: item.productId,
+          warehouseId: parseInt(warehouseId),
+          businessId,              // ← Kritik: SaaS izolyatsiyasi uchun shart
+          quantity: -item.quantity,
+          type: 'OUT',
+          reason: `Sotuv #${receiptNo}`,
+          userId
+        }, tx);
       }
 
       // 6. Create Debt if needed
@@ -134,32 +174,58 @@ class SaleService {
         const dueDate = new Date();
         dueDate.setDate(dueDate.getDate() + 30);
         await tx.debt.create({
-          data: { type: 'customer', customerId: parseInt(customerId), saleId: sale.id, amount: finalDebtAmount, dueDate, status: 'pending' },
+          data: { type: 'customer', businessId, customerId: parseInt(customerId), saleId: sale.id, amount: finalDebtAmount, dueDate, status: 'pending' },
         });
       }
 
       // 7. Audit Log (sync in tx for consistency)
+      // priceEdits: sotuvchi narxni o'zgartirgan mahsulotlar — egaga ko'rinadi
+      const priceEdits = saleItemsData
+        .filter(si => {
+          const prod = products.find(p => p.id === si.productId);
+          return prod && Math.abs(si.unitPrice - prod.sellPrice) > 0.01;
+        })
+        .map(si => {
+          const prod = products.find(p => p.id === si.productId);
+          return {
+            productId:     si.productId,
+            productName:   prod?.name,
+            originalPrice: prod?.sellPrice,
+            soldPrice:     si.unitPrice,
+            qty:           si.quantity,
+          };
+        });
+
       await tx.auditLog.create({
         data: {
           userId,
+          businessId,
           action: 'CREATE_SALE',
           entityType: 'Sale',
           entityId: sale.id,
-          newData: sale
+          newData: {
+            receiptNo:    sale.receiptNo,
+            total:        sale.total,
+            paymentMethod: sale.paymentMethod,
+            itemsCount:   saleItemsData.length,
+            // Narx o'zgartirilgan mahsulotlar (bo'sh bo'lsa — narx o'zgartirilmagan)
+            priceEdits:   priceEdits.length > 0 ? priceEdits : undefined,
+          }
         }
       });
 
       return sale;
     }).then(async (sale) => {
-      // Async: Telegram notification
-      botService.sendSaleNotification(sale.id).catch(err => console.error('Bot notification error:', err));
+      // Async: Telegram notifications
+      botService.sendClientSaleNotification(sale.id).catch(err => console.error('Client notification error:', err));
+      botService.sendAdminSaleNotification(sale.id).catch(err => console.error('Admin notification error:', err));
       return sale;
     });
   }
 
-  async cancelSale(id, userId, note = "Sotuv bekor qilindi") {
-    const sale = await prisma.sale.findUnique({
-      where: { id },
+  async cancelSale(id, userId, businessId, note = "Sotuv bekor qilindi") {
+    const sale = await prisma.sale.findFirst({
+      where: { id, businessId },
       include: { items: true }
     });
 
@@ -170,39 +236,22 @@ class SaleService {
       // 1. Update Sale status
       const updatedSale = await tx.sale.update({
         where: { id },
-        data: { status: 'cancelled', note: sale.note ? `${sale.note} | Bekor qilindi: ${note}` : note }
+        data: { status: 'cancelled' }
       });
 
       // 2. Restore stocks
       for (const item of sale.items) {
-        // Track warehouse from original transaction
-        const lastTx = await tx.warehouseTx.findFirst({
-          where: { productId: item.productId, reason: { contains: sale.receiptNo }, type: 'OUT' },
-          orderBy: { createdAt: 'desc' }
-        });
+        const warehouseId = sale.warehouseId;
+        if (!warehouseId) continue;
 
-        const warehouseId = lastTx?.warehouseId || 1;
-
-        await tx.productStock.update({
-          where: { productId_warehouseId: { productId: item.productId, warehouseId } },
-          data: { quantity: { increment: item.quantity } }
-        });
-
-        await tx.product.update({
-          where: { id: item.productId },
-          data: { stock: { increment: item.quantity } }
-        });
-
-        await tx.warehouseTx.create({
-          data: {
-            type: 'IN',
-            productId: item.productId,
-            warehouseId,
-            quantity: item.quantity,
-            reason: `Bekor qilingan sotuv #${sale.receiptNo}`,
-            userId
-          }
-        });
+        await stockService.adjustStock({
+          productId: item.productId,
+          warehouseId,
+          quantity: item.quantity,
+          type: 'IN',
+          reason: `Bekor qilingan sotuv #${sale.receiptNo}`,
+          userId
+        }, tx);
       }
 
       // 3. Cancel related debt
@@ -215,10 +264,16 @@ class SaleService {
       await tx.auditLog.create({
         data: {
           userId,
+          businessId,
           action: 'CANCEL_SALE',
           entityType: 'Sale',
           entityId: id,
-          oldData: sale,
+          oldData: { 
+            receiptNo: sale.receiptNo, 
+            total: sale.total, 
+            customerId: sale.customerId,
+            paymentMethod: sale.paymentMethod 
+          },
           newData: { status: 'cancelled' },
           note
         }

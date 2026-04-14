@@ -1,13 +1,24 @@
 import React, { useState, useEffect } from 'react';
-import { Search, Plus, Filter, Trash2, Calendar, Wallet } from 'lucide-react';
+import { Search, Plus, Filter, Trash2, Calendar, Wallet, X } from 'lucide-react';
 import api from '../../api/axios';
 import useCurrency from '../../store/useCurrency';
 import useToast from '../../store/useToast';
+import { User } from '../../types';
+
+interface Expense {
+  id: number | string;
+  amount: number;
+  category: string;
+  description?: string;
+  date: string;
+  user?: User;
+  createdAt: string;
+}
 
 export default function Expenses() {
   const toast = useToast();
   const { format } = useCurrency();
-  const [expenses, setExpenses] = useState([]);
+  const [expenses, setExpenses] = useState<Expense[]>([]);
 
   const [loading, setLoading] = useState(true);
   const [totalAmount, setTotalAmount] = useState(0);
@@ -19,7 +30,7 @@ export default function Expenses() {
   const fetchExpenses = async () => {
     try {
       setLoading(true);
-      const res = await api.get('/expenses');
+      const res = await api.get<any>('/expenses');
       setExpenses(res?.expenses || []);
       setTotalAmount(res?.totalAmount || 0);
     } catch (error) {
@@ -33,25 +44,25 @@ export default function Expenses() {
     fetchExpenses();
   }, []);
 
-  const handleCreate = async (e) => {
+  const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
       await api.post('/expenses', formData);
       toast.success("Xarajat muvaffaqiyatli saqlandi");
       fetchExpenses();
-    } catch (err) {
-      toast.error(err.response?.data?.error || 'Xatolik yuz berdi');
+    } catch (err: any) {
+      toast.error(err?.response?.data?.error || err || 'Xatolik yuz berdi');
     }
   };
 
 
-  const handleDelete = async (id) => {
+  const handleDelete = async (id: number | string) => {
     if (!window.confirm('Xarajatni o\'chirmoqchimisiz?')) return;
     try {
       await api.delete(`/expenses/${id}`);
       fetchExpenses();
       toast.success("Xarajat o'chirildi");
-    } catch (err) {
+    } catch (err: any) {
       toast.error('Xatolik yuz berdi');
     }
   };
@@ -97,9 +108,9 @@ export default function Expenses() {
             </thead>
             <tbody>
               {loading ? (
-                <tr><td colSpan="7" style={{ textAlign: 'center', padding: '2rem' }}>Yuklanmoqda...</td></tr>
+                <tr><td colSpan={7} style={{ textAlign: 'center', padding: '2rem' }}>Yuklanmoqda...</td></tr>
               ) : expenses.length === 0 ? (
-                <tr><td colSpan="7" style={{ textAlign: 'center', padding: '2rem' }}>Xarajatlar topilmadi</td></tr>
+                <tr><td colSpan={7}><div className="table-empty">Harajatlar topilmadi</div></td></tr>
               ) : expenses.map((ex, idx) => (
                 <tr key={ex.id}>
                   <td style={{ color: 'var(--text-muted)', fontSize: '0.8125rem' }}>{idx + 1}</td>
@@ -136,56 +147,61 @@ export default function Expenses() {
       {/* Add Expense Modal */}
       {showAddModal && (
         <div className="modal-overlay" onClick={() => setShowAddModal(false)}>
-          <div className="modal-content" onClick={e => e.stopPropagation()} style={{ maxWidth: '400px' }}>
-            <h2 style={{ marginBottom: '1.5rem' }}>Yangi xarajat</h2>
+          <div className="modal-content fade-in" onClick={e => e.stopPropagation()} style={{ maxWidth: '450px' }}>
+            <div className="modal-header">
+              <h2 className="modal-title">Yangi xarajat</h2>
+              <button className="modal-close" onClick={() => setShowAddModal(false)}><X size={20} /></button>
+            </div>
             <form onSubmit={handleCreate}>
-              <div className="form-group">
-                <label className="form-label">Summa</label>
-                <input
-                  type="number"
-                  className="input-field"
-                  required
-                  value={formData.amount}
-                  onChange={e => setFormData({ ...formData, amount: e.target.value })}
-                  placeholder="0.00"
-                />
+              <div className="modal-body">
+                <div className="form-group">
+                  <label className="form-label">Summa</label>
+                  <input
+                    type="number"
+                    className="input-field"
+                    required
+                    value={formData.amount}
+                    onChange={e => setFormData({ ...formData, amount: e.target.value })}
+                    placeholder="0.00"
+                  />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Toifa</label>
+                  <select
+                    className="input-field"
+                    value={formData.category}
+                    onChange={e => setFormData({ ...formData, category: e.target.value })}
+                  >
+                    <option value="Rent">Ijara</option>
+                    <option value="Salary">Maosh</option>
+                    <option value="Utility">Kommunal</option>
+                    <option value="Food">Oziq-ovqat</option>
+                    <option value="Cargo">Kargo/Logistika</option>
+                    <option value="Marketing">Reklama</option>
+                    <option value="Other">Boshqa</option>
+                  </select>
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Sana</label>
+                  <input
+                    type="date"
+                    className="input-field"
+                    value={formData.date}
+                    onChange={e => setFormData({ ...formData, date: e.target.value })}
+                  />
+                </div>
+                <div className="form-group" style={{ marginBottom: 0 }}>
+                  <label className="form-label">Izoh</label>
+                  <textarea
+                    className="input-field"
+                    rows={3}
+                    value={formData.description}
+                    onChange={e => setFormData({ ...formData, description: e.target.value })}
+                    placeholder="Xarajat haqida qisqacha..."
+                  />
+                </div>
               </div>
-              <div className="form-group">
-                <label className="form-label">Toifa</label>
-                <select
-                  className="input-field"
-                  value={formData.category}
-                  onChange={e => setFormData({ ...formData, category: e.target.value })}
-                >
-                  <option value="Rent">Ijara</option>
-                  <option value="Salary">Maosh</option>
-                  <option value="Utility">Kommunal</option>
-                  <option value="Food">Oziq-ovqat</option>
-                  <option value="Cargo">Kargo/Logistika</option>
-                  <option value="Marketing">Reklama</option>
-                  <option value="Other">Boshqa</option>
-                </select>
-              </div>
-              <div className="form-group">
-                <label className="form-label">Sana</label>
-                <input
-                  type="date"
-                  className="input-field"
-                  value={formData.date}
-                  onChange={e => setFormData({ ...formData, date: e.target.value })}
-                />
-              </div>
-              <div className="form-group">
-                <label className="form-label">Izoh</label>
-                <textarea
-                  className="input-field"
-                  rows="3"
-                  value={formData.description}
-                  onChange={e => setFormData({ ...formData, description: e.target.value })}
-                  placeholder="Xarajat haqida qisqacha..."
-                />
-              </div>
-              <div style={{ display: 'flex', gap: '0.75rem', marginTop: '1.5rem' }}>
+              <div className="modal-footer">
                 <button type="button" className="btn btn-outline" style={{ flex: 1 }} onClick={() => setShowAddModal(false)}>Bekor qilish</button>
                 <button type="submit" className="btn btn-primary" style={{ flex: 1 }}>Saqlash</button>
               </div>

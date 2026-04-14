@@ -3,6 +3,7 @@ import { Users, Shield, Eye, Edit2, Trash2, Plus, CheckCircle, XCircle, Loader2 
 import api from '../../api/axios';
 import AddStaffModal from '../../components/AddStaffModal';
 import useToast from '../../store/useToast';
+import { Staff } from '../../types';
 
 const ROLES = {
   ADMIN:    { label:'Admin',    color:'#dc2626', bg:'#fee2e2' },
@@ -20,12 +21,12 @@ export default function StaffList() {
   const toast = useToast();
   const [tab, setTab] = useState('staff');
 
-  const [staff, setStaff] = useState([]);
+  const [staff, setStaff] = useState<Staff[]>([]);
   const [loading, setLoading] = useState(true);
   const [permsLoading, setPermsLoading] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
-  const [editStaff, setEditStaff] = useState(null);
-  const [rolePermissions, setRolePermissions] = useState({});
+  const [editStaff, setEditStaff] = useState<Staff | null>(null);
+  const [rolePermissions, setRolePermissions] = useState<Record<string, Record<string, boolean>>>({});
 
   useEffect(() => {
     fetchStaff();
@@ -35,7 +36,7 @@ export default function StaffList() {
   const fetchStaff = async () => {
     try {
       setLoading(true);
-      const res = await api.get('/staff');
+      const res = await api.get<any>('/staff');
       const list = Array.isArray(res) ? res : (res?.staff || res?.data || []);
       setStaff(list);
     } catch (err) {
@@ -49,10 +50,10 @@ export default function StaffList() {
   const fetchPermissions = async () => {
     try {
       setPermsLoading(true);
-      const res = await api.get('/permissions');
+      const res = await api.get<any>('/permissions');
       const data = Array.isArray(res) ? res : (res?.data || []);
-      const mapping = {};
-      data.forEach(p => {
+      const mapping: Record<string, Record<string, boolean>> = {};
+      data.forEach((p: any) => {
         try {
           mapping[p.role] = JSON.parse(p.permissions);
         } catch { mapping[p.role] = {}; }
@@ -65,7 +66,7 @@ export default function StaffList() {
     }
   };
 
-  const togglePermission = async (role, module) => {
+  const togglePermission = async (role: string, module: string) => {
     const currentPerms = rolePermissions[role] || {};
     const newPerms = { ...currentPerms, [module]: !currentPerms[module] };
     
@@ -74,7 +75,7 @@ export default function StaffList() {
 
     try {
       await api.put(`/permissions/${role}`, { permissions: JSON.stringify(newPerms) });
-      toast.success(`${ROLES[role].label} vakolatlari saqlandi`);
+      toast.success(`${(ROLES as any)[role].label} vakolatlari saqlandi`);
     } catch (err) {
       toast.error('Vakolatni saqlashda xatolik yuz berdi');
       // Rollback
@@ -83,7 +84,7 @@ export default function StaffList() {
 
   };
 
-  const handleDelete = async (id) => {
+  const handleDelete = async (id: number) => {
     if (window.confirm('Xodimni o\'chirib (nofaol qilib) qo\'ymoqchimisiz?')) {
       try {
         await api.put(`/staff/${id}`, { isActive: false });
@@ -114,7 +115,7 @@ export default function StaffList() {
       </div>
 
       {/* Tabs */}
-      <div style={{ display:'flex', gap:'0.5rem', marginBottom:'1.5rem', borderBottom:'1px solid var(--border)', paddingBottom:'0.5rem' }}>
+      <div className="mb-6" style={{ display:'flex', gap:'0.5rem', borderBottom:'1px solid var(--border)', paddingBottom:'0.5rem' }}>
         <button 
           onClick={()=>setTab('staff')} 
           className={`tab-btn ${tab==='staff'?'active':''}`}
@@ -170,8 +171,8 @@ export default function StaffList() {
                    </td></tr>
                 ) : staff.length === 0 ? (
                   <tr><td colSpan={7} style={{ textAlign:'center', padding:'3rem', color:'var(--text-muted)' }}>Xodimlar topilmadi</td></tr>
-                ) : staff.map((s)=>{
-                  const role = ROLES[s.role] || ROLES.CASHIER;
+                ) : staff.map((s: Staff)=>{
+                  const role = (ROLES as any)[s.role] || ROLES.CASHIER;
                   return (
                     <tr key={s.id} style={{ transition:'background 0.2s' }}>
                       <td style={{ color:'var(--text-muted)', fontSize:'0.8rem', padding:'1rem 1.25rem' }}>E-{s.id}</td>
@@ -184,7 +185,7 @@ export default function StaffList() {
                             fontWeight:800, color:role.color, fontSize:'0.9rem', flexShrink:0,
                             border:`1px solid ${role.color}40`
                           }}>
-                            {s.name.split(' ').map(n=>n[0]).join('').slice(0,2).toUpperCase()}
+                            {s.name.split(' ').map((n: string)=>n[0]).join('').slice(0,2).toUpperCase()}
                           </div>
                           <div>
                             <div style={{ fontWeight:700, fontSize:'0.95rem' }}>{s.name}</div>
@@ -231,7 +232,7 @@ export default function StaffList() {
                   {Object.keys(ROLES).map((roleKey)=>(
                     <th key={roleKey} style={{ textAlign:'center', padding:'1rem' }}>
                       <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:'0.25rem' }}>
-                        <span className="badge" style={{ background:`${ROLES[roleKey].color}15`, color:ROLES[roleKey].color, fontWeight:800 }}>{ROLES[roleKey].label}</span>
+                        <span className="badge" style={{ background:`${(ROLES as any)[roleKey].color}15`, color:(ROLES as any)[roleKey].color, fontWeight:800 }}>{(ROLES as any)[roleKey].label}</span>
                       </div>
                     </th>
                   ))}
@@ -245,7 +246,7 @@ export default function StaffList() {
                     <td style={{ fontWeight:700, padding:'1.125rem 1.5rem', color:'var(--text-main)', fontSize:'0.9rem' }}>{mod}</td>
                     {Object.keys(ROLES).map(roleKey => {
                       const isActive = rolePermissions[roleKey]?.[mod] || false;
-                      const roleColor = ROLES[roleKey].color;
+                      const roleColor = (ROLES as any)[roleKey].color;
                       const isReadOnly = roleKey === 'ADMIN';
 
                       return (

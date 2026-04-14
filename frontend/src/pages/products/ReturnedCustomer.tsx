@@ -1,27 +1,45 @@
 import React, { useState, useEffect } from 'react';
-import { RotateCcw, Plus, Search, Calendar, User, ArrowUpRight } from 'lucide-react';
+import { RotateCcw, Plus, Search, Calendar, User, ArrowUpRight, XCircle } from 'lucide-react';
 import api from '../../api/axios';
+import { Product, Warehouse, User as UserType } from '../../types';
+
+interface Transaction {
+  id: number;
+  productId: number;
+  warehouseId: number;
+  quantity: number;
+  reason: string;
+  user?: UserType;
+  product?: Product;
+  warehouse?: Warehouse;
+  createdAt: string;
+}
 
 export default function ReturnedCustomer() {
-  const [data, setData] = useState([]);
+  const [data, setData] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
-  const [catalog, setCatalog] = useState([]);
-  const [warehouses, setWarehouses] = useState([]);
+  const [catalog, setCatalog] = useState<Product[]>([]);
+  const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
   const [form, setForm] = useState({ productId: '', warehouseId: '', quantity: '', reason: '' });
   const [error, setError] = useState('');
 
   const fetchData = async () => {
     try {
       const [txRes, prodRes, wareRes] = await Promise.all([
-        api.get('/api/warehouse', { params: { type: 'IN' } }),
-        api.get('/products', { params: { limit: 1000 } }),
-        api.get('/api/warehouses')
+        api.get<any>('/api/warehouse', { params: { type: 'IN' } }),
+        api.get<any>('/products', { params: { limit: 1000 } }),
+        api.get<any>('/api/warehouses')
       ]);
       // Filter for reasons that sound like returns
-      setData(txRes.data.data.filter(tx => tx.reason && (tx.reason.toLowerCase().includes('qaytdi') || tx.reason.toLowerCase().includes('voz kechish'))));
-      setCatalog(prodRes.data || []);
-      setWarehouses(wareRes.data?.data || []);
+      const txs = Array.isArray(txRes) ? txRes : (txRes?.data?.data || txRes?.data || []);
+      setData(txs.filter((tx: Transaction) => tx.reason && (tx.reason.toLowerCase().includes('qaytdi') || tx.reason.toLowerCase().includes('voz kechish'))));
+      
+      const prods = Array.isArray(prodRes) ? prodRes : (prodRes?.data || []);
+      setCatalog(prods);
+
+      const wares = Array.isArray(wareRes) ? wareRes : (wareRes?.data?.data || wareRes?.data || []);
+      setWarehouses(wares);
     } catch (err) {
       console.error(err);
     } finally {
@@ -33,7 +51,7 @@ export default function ReturnedCustomer() {
     fetchData();
   }, []);
 
-  const handleSubmit = async (e) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     try {
@@ -48,8 +66,8 @@ export default function ReturnedCustomer() {
       setModalOpen(false);
       setForm({ productId: '', warehouseId: '', quantity: '', reason: '' });
       fetchData();
-    } catch (err) {
-      setError(err.response?.data?.error || 'Xatolik yuz berdi');
+    } catch (err: any) {
+      setError(err?.response?.data?.error || err || 'Xatolik yuz berdi');
     }
   };
 
@@ -103,7 +121,7 @@ export default function ReturnedCustomer() {
                 </tr>
               )) : (
                 <tr>
-                  <td colSpan="6" style={{ textAlign:'center', padding:'3rem', color:'var(--text-muted)' }}>
+                  <td colSpan={6} style={{ textAlign:'center', padding:'3rem', color:'var(--text-muted)' }}>
                     Mijozdan qaytgan mahsulotlar hozircha yo'q
                   </td>
                 </tr>
@@ -119,7 +137,7 @@ export default function ReturnedCustomer() {
           <div className="modal-content animate-slide-up" style={{ maxWidth:'450px' }}>
             <div className="modal-header">
               <h2 className="modal-title">Qaytarishni rasmiylashtirish</h2>
-              <button className="btn-icon" onClick={() => setModalOpen(false)}><CircleX size={20}/></button>
+              <button className="btn-icon" onClick={() => setModalOpen(false)}><XCircle size={20}/></button>
             </div>
             <form onSubmit={handleSubmit}>
               <div className="modal-body">

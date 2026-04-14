@@ -2,21 +2,22 @@ import React, { useState, useEffect } from 'react';
 import { Tags, Plus, Edit2, Trash2, Search, XCircle, Grid } from 'lucide-react';
 import api from '../../api/axios';
 import useToast from '../../store/useToast';
+import { Category } from '../../types';
 
 export default function CategoryList() {
   const toast = useToast();
-  const [categories, setCategories] = useState([]);
+  const [categories, setCategories] = useState<Category[]>([]);
 
   const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
-  const [editing, setEditing] = useState(null);
+  const [editing, setEditing] = useState<Category | null>(null);
   const [form, setForm] = useState({ name: '' });
   const [error, setError] = useState('');
   const [search, setSearch] = useState('');
 
   const fetchCategories = async () => {
     try {
-      const res = await api.get('/categories');
+      const res = await api.get<any>('/categories');
       const list = Array.isArray(res) ? res : (res?.categories || res?.data || []);
       setCategories(list);
     } catch (err) {
@@ -33,7 +34,7 @@ export default function CategoryList() {
 
   const filtered = categories.filter(c => c.name.toLowerCase().includes(search.toLowerCase()));
 
-  const handleSubmit = async (e) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     if (!form.name.trim()) { setError('Turkum nomi majburiy!'); return; }
@@ -47,23 +48,23 @@ export default function CategoryList() {
       setEditing(null);
       setForm({ name: '' });
       fetchCategories();
-    } catch (err) {
+    } catch (err: any) {
       setError(typeof err === 'string' ? err : 'Xatolik yuz berdi');
     }
   };
 
-  const handleEdit = (c) => {
+  const handleEdit = (c: Category) => {
     setEditing(c);
     setForm({ name: c.name });
     setModalOpen(true);
   };
 
-  const handleDelete = async (id) => {
+  const handleDelete = async (id: number | string) => {
     if (!window.confirm("Haqiqatan ham ushbu turkumni o'chirmoqchimisiz?")) return;
     try {
       await api.delete(`/categories/${id}`);
       fetchCategories();
-    } catch (err) {
+    } catch (err: any) {
       toast.error(typeof err === 'string' ? err : "O'chirishda xatolik. Turkumda mahsulotlar bo'lishi mumkin.");
     }
   };
@@ -107,7 +108,7 @@ export default function CategoryList() {
                   </div>
                   <div>
                     <div style={{ fontWeight:700, fontSize:'1.05rem' }}>{c.name}</div>
-                    <div style={{ fontSize:'0.8rem', color:'var(--text-muted)' }}>{c._count?.products || 0} ta mahsulot</div>
+                    <div style={{ fontSize:'0.8rem', color:'var(--text-muted)' }}>{(c as any)._count?.products || 0} ta mahsulot</div>
                   </div>
                 </div>
                 <div style={{ display:'flex', gap:'0.25rem' }}>

@@ -1,29 +1,39 @@
 import { create } from 'zustand';
 
+export type ThemeType = 'default' | 'theme-blue' | 'theme-green' | 'theme-dark';
+
 interface ThemeState {
-  theme: string;
-  toggleTheme: () => void;
+  theme: ThemeType;
+  setTheme: (theme: ThemeType) => void;
   initTheme: () => void;
 }
 
 const useTheme = create<ThemeState>((set) => ({
-  theme: localStorage.getItem('nexus-theme') || 'light',
-  toggleTheme: () => set((state) => {
-    const newTheme = state.theme === 'light' ? 'dark' : 'light';
-    localStorage.setItem('nexus-theme', newTheme);
-    if (newTheme === 'dark') {
-      document.documentElement.classList.add('dark');
-    } else {
-      document.documentElement.classList.remove('dark');
+  theme: (localStorage.getItem('app-theme') as ThemeType) || 'default',
+  setTheme: (newTheme) => {
+    const root = document.documentElement;
+    root.classList.remove('theme-blue', 'theme-green', 'theme-dark', 'dark');
+    
+    if (newTheme !== 'default') {
+      root.classList.add(newTheme);
+      if (newTheme === 'theme-dark') {
+        root.classList.add('dark');
+      }
     }
-    return { theme: newTheme };
-  }),
+    
+    localStorage.setItem('app-theme', newTheme);
+    set({ theme: newTheme });
+  },
   initTheme: () => {
-    const stored = localStorage.getItem('nexus-theme') || 'light';
-    if (stored === 'dark') {
-      document.documentElement.classList.add('dark');
-    } else {
-      document.documentElement.classList.remove('dark');
+    const stored = (localStorage.getItem('app-theme') as ThemeType) || 'default';
+    const root = document.documentElement;
+    root.classList.remove('theme-blue', 'theme-green', 'theme-dark', 'dark');
+    
+    if (stored !== 'default') {
+      root.classList.add(stored);
+      if (stored === 'theme-dark') {
+        root.classList.add('dark');
+      }
     }
     set({ theme: stored });
   }

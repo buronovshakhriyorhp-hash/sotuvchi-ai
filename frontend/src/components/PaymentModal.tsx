@@ -1,8 +1,20 @@
 import React, { useState } from 'react';
 import { X, CheckCircle, CreditCard, Banknote, DollarSign } from 'lucide-react';
 import api from '../api/axios';
+import { Customer } from '../types';
 
-export default function PaymentModal({ sale, customers, onClose, onConfirmed }) {
+interface PaymentModalProps {
+  sale: {
+    subtotal: number;
+    payload: any;
+    customerId: number | null;
+  };
+  customers: Customer[];
+  onClose: () => void;
+  onConfirmed: (sale: any, print: boolean) => void;
+}
+
+export default function PaymentModal({ sale, customers, onClose, onConfirmed }: PaymentModalProps) {
   const [method, setMethod] = useState('cash');
   const [cashAmount, setCashAmount] = useState(sale.subtotal.toString());
   const [cardAmount, setCardAmount] = useState('');
@@ -33,12 +45,12 @@ export default function PaymentModal({ sale, customers, onClose, onConfirmed }) 
 
   const dAmt = Math.max(0, toPay - currSum);
 
-  const handlePay = async (print) => {
+  const handlePay = async (print: boolean) => {
     let finalDebt = 0;
     
     if (method === 'cash') finalDebt = Math.max(0, toPay - cAmt);
-    else if (method === 'card') finalDebt = Math.max(0, toPay - parseFloat(cardAmount||0));
-    else if (method === 'bank') finalDebt = Math.max(0, toPay - parseFloat(bankAmount||0));
+    else if (method === 'card') finalDebt = Math.max(0, toPay - (parseFloat(cardAmount) || 0));
+    else if (method === 'bank') finalDebt = Math.max(0, toPay - (parseFloat(bankAmount) || 0));
     else if (method === 'debt') finalDebt = toPay;
     else finalDebt = dAmt;
 
@@ -58,9 +70,9 @@ export default function PaymentModal({ sale, customers, onClose, onConfirmed }) 
         if (method === 'cash') {
             p.cashAmount = cAmt; p.cardAmount = 0; p.bankAmount = 0; p.debtAmount = finalDebt;
         } else if (method === 'card') {
-            p.cashAmount = 0; p.cardAmount = parseFloat(cardAmount||0); p.bankAmount = 0; p.debtAmount = finalDebt;
+            p.cashAmount = 0; p.cardAmount = parseFloat(cardAmount) || 0; p.bankAmount = 0; p.debtAmount = finalDebt;
         } else if (method === 'bank') {
-            p.cashAmount = 0; p.cardAmount = 0; p.bankAmount = parseFloat(bankAmount||0); p.debtAmount = finalDebt;
+            p.cashAmount = 0; p.cardAmount = 0; p.bankAmount = parseFloat(bankAmount) || 0; p.debtAmount = finalDebt;
         } else if (method === 'debt') {
             p.cashAmount = 0; p.cardAmount = 0; p.bankAmount = 0; p.debtAmount = finalDebt;
         } else {
@@ -76,7 +88,7 @@ export default function PaymentModal({ sale, customers, onClose, onConfirmed }) 
     }
   };
 
-  const setFullAmount = (m) => {
+  const setFullAmount = (m: string) => {
     if (m === 'cash') setCashAmount(toPay.toString());
     else if (m === 'card') setCardAmount(toPay.toString());
     else if (m === 'bank') setBankAmount(toPay.toString());
@@ -116,7 +128,7 @@ export default function PaymentModal({ sale, customers, onClose, onConfirmed }) 
                 <label className="form-label">Mijozni biriktirish (Qarz uchun majburiy)</label>
                 <select className="input-field" value={customerId} onChange={e=>setCustomerId(e.target.value)}>
                     <option value="">Chakana mijoz</option>
-                    {customers.map(c=><option key={c.id} value={c.id}>{c.name} {c.phone}</option>)}
+                    {customers.map((c: Customer) => <option key={c.id} value={c.id}>{c.name} {c.phone}</option>)}
                 </select>
             </div>
 

@@ -1,24 +1,5 @@
 import api from '../api/axios';
-
-export interface Product {
-  id: number;
-  name: string;
-  sku: string;
-  category?: { id: number; name: string };
-  sellPrice: number;
-  wholesalePrice: number;
-  costPrice: number;
-  stock: number;
-  minStock: number;
-  unit: string;
-  isActive: boolean;
-  image?: string;
-  stocks?: Array<{
-    warehouseId: number;
-    quantity: number;
-    warehouse: { id: number; name: string };
-  }>;
-}
+import { Product } from '../types';
 
 export interface ProductListResponse {
   products: Product[];
@@ -33,24 +14,30 @@ export interface ProductParams {
 }
 
 class ProductService {
-  async getMany(params?: ProductParams): Promise<ProductListResponse | Product[]> {
-    return (api.get('/products', { params }) as any);
+  async getMany(params?: ProductParams): Promise<ProductListResponse> {
+    const res = await api.get<ProductListResponse | Product[]>('/products', { params });
+    if (Array.isArray(res)) {
+      return { products: res, total: res.length };
+    }
+    return res;
   }
 
   async getOne(id: number | string): Promise<Product> {
-    return (api.get(`/products/${id}`) as any);
+    return api.get<Product>(`/products/${id}`);
   }
 
-  async create(data: Partial<Product>): Promise<Product> {
-    return (api.post('/products', data) as any);
+  async create(data: Partial<Product> | FormData): Promise<Product> {
+    const config = data instanceof FormData ? { headers: { 'Content-Type': 'multipart/form-data' } } : {};
+    return api.post<Product>('/products', data, config);
   }
 
-  async update(id: number | string, data: Partial<Product>): Promise<Product> {
-    return (api.put(`/products/${id}`, data) as any);
+  async update(id: number | string, data: Partial<Product> | FormData): Promise<Product> {
+    const config = data instanceof FormData ? { headers: { 'Content-Type': 'multipart/form-data' } } : {};
+    return api.put<Product>(`/products/${id}`, data, config);
   }
 
   async delete(id: number | string): Promise<void> {
-    return (api.delete(`/products/${id}`) as any);
+    return api.delete<void>(`/products/${id}`);
   }
 }
 

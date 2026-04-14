@@ -1,12 +1,13 @@
 import React, { useState, useEffect, useRef, ChangeEvent } from 'react';
 import { X, Upload, RefreshCw, Plus, ImageOff, Package, Tag, Barcode, DollarSign, Layers, Info, Loader2 } from 'lucide-react';
-import { categoryService, Category } from '@/services/category.service';
-import { productService, Product } from '@/services/product.service';
-import { warehouseService, Warehouse } from '@/services/warehouse.service';
+import { Category, Product, Warehouse } from '../types';
+import { categoryService } from '../services/category.service';
+import { productService } from '../services/product.service';
+import { warehouseService } from '../services/warehouse.service';
 
 interface AddProductModalProps {
   onClose: () => void;
-  onSaved: (product: any) => void;
+  onSaved: (product: Product) => void;
   editProduct?: Product | null;
 }
 
@@ -60,6 +61,22 @@ export default function AddProductModal({ onClose, onSaved, editProduct = null }
   const [showAddCategory, setShowAddCategory] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState('');
 
+  const [showAddWarehouse, setShowAddWarehouse] = useState(false);
+  const [newWarehouseName, setNewWarehouseName] = useState('');
+
+  const handleAddWarehouse = async () => {
+    if (!newWarehouseName.trim()) return;
+    try {
+      const res = await warehouseService.create({ name: newWarehouseName.trim() });
+      setWarehouses(prev => [...prev, res]);
+      setForm(f => ({ ...f, warehouseId: String(res.id) }));
+      setNewWarehouseName('');
+      setShowAddWarehouse(false);
+    } catch (err) {
+      setError("Ombor qo'shib bo'lmadi");
+    }
+  };
+
   useEffect(() => {
     fetchCategories();
     fetchWarehouses();
@@ -67,7 +84,7 @@ export default function AddProductModal({ onClose, onSaved, editProduct = null }
       setForm({
         sku: editProduct.sku || '',
         name: editProduct.name || '',
-        categoryId: String(editProduct.category?.id || ''),
+        categoryId: String(editProduct.categoryId || editProduct.category?.id || ''),
         unit: editProduct.unit || 'dona',
         packageName: (editProduct as any).packageName || '',
         packageQty: (editProduct as any).packageQty || '',
@@ -83,6 +100,9 @@ export default function AddProductModal({ onClose, onSaved, editProduct = null }
         warehouseId: '',
       });
       if (editProduct.image) setImagePreview(editProduct.image);
+    } else {
+      // Auto-generate barcode only for NEW products
+      generateBarcode();
     }
   }, [editProduct]);
 
@@ -129,21 +149,75 @@ export default function AddProductModal({ onClose, onSaved, editProduct = null }
     setForm(f => ({ ...f, barcode: code.slice(0, 13) }));
   };
 
-  const handleImageChange = (e: ChangeEvent<HTMLInputElement>) => {
+  const optimizeImage = (file: File): Promise<File> => {
+    return new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onerror = () => resolve(file); // Fallback on reader error
+      reader.onload = (e) => {
+        const img = new Image();
+        img.onerror = () => resolve(file); // Fallback if image format not supported
+        img.onload = () => {
+          try {
+            const canvas = document.createElement('canvas');
+            let width = img.width;
+            let height = img.height;
+            const maxDim = 1024;
+
+            if (width > height) {
+              if (width > maxDim) {
+                height = Math.round((height * maxDim) / width);
+                width = maxDim;
+              }
+            } else {
+              if (height > maxDim) {
+                width = Math.round((width * maxDim) / height);
+                height = maxDim;
+              }
+            }
+
+            canvas.width = width;
+            canvas.height = height;
+            const ctx = canvas.getContext('2d');
+            ctx?.drawImage(img, 0, 0, width, height);
+
+            canvas.toBlob((blob) => {
+              if (blob) {
+                const optimizedFile = new File([blob], file.name.replace(/\.[^/.]+$/, "") + ".webp", {
+                  type: 'image/webp',
+                  lastModified: Date.now()
+                });
+                resolve(optimizedFile);
+              } else {
+                resolve(file);
+              }
+            }, 'image/webp', 0.85);
+          } catch (err) {
+            resolve(file); // Safe fallback
+          }
+        };
+        img.src = e.target?.result as string;
+      };
+      reader.readAsDataURL(file);
+    });
+  };
+
+  const handleImageChange = async (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    const validTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'];
-    if (!validTypes.includes(file.type)) {
-      return setError('Faqat JPG, PNG, GIF yoki WebP formatdagi rasmlar qabul qilinadi!');
+    
+    setLoading(true);
+    try {
+      const optimized = await optimizeImage(file);
+      setImageFile(optimized);
+      const reader = new FileReader();
+      reader.onloadend = () => setImagePreview(reader.result as string);
+      reader.readAsDataURL(optimized);
+      setError('');
+    } catch (err) {
+      setError("Rasmni qayta ishlashda xatolik yuz berdi");
+    } finally {
+      setLoading(false);
     }
-    if (file.size > 5 * 1024 * 1024) {
-      return setError('Rasm hajmi 5MB dan oshmasligi kerak!');
-    }
-    setError('');
-    setImageFile(file);
-    const reader = new FileReader();
-    reader.onloadend = () => setImagePreview(reader.result as string);
-    reader.readAsDataURL(file);
   };
 
   const handleAddCategory = async () => {
@@ -204,7 +278,7 @@ export default function AddProductModal({ onClose, onSaved, editProduct = null }
   return (
     <div className="modal-overlay" onClick={onClose} style={{ backdropFilter: 'blur(10px)', background: 'rgba(15, 23, 42, 0.4)' }}>
       <div 
-        className="modal-content modal-lg animate-in" 
+        className="modal-content modal-lg fade-in" 
         onClick={e => e.stopPropagation()} 
         style={{ 
           maxWidth: '1000px', borderRadius: '28px', padding: 0, overflow: 'hidden',
@@ -323,17 +397,31 @@ export default function AddProductModal({ onClose, onSaved, editProduct = null }
                 <Barcode size={18} /> <span style={{ fontWeight: 800, fontSize: '0.875rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Inventar va Shtrix-kod</span>
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1.25rem', marginBottom: '1.25rem' }}>
-                <div className="form-group">
-                  <label className="form-label" style={{ fontWeight: 700 }}>Ombor</label>
-                  <select className="input-field" style={{ height: '48px', borderRadius: '12px' }} value={form.warehouseId} onChange={e => setForm(f => ({ ...f, warehouseId: e.target.value }))}>
-                    {warehouses.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}
-                  </select>
+                <div className="form-group" style={{ gridColumn: 'span 3' }}>
+                  <label className="form-label" style={{ fontWeight: 700 }}>Ombor qo'shish yoki tanlash</label>
+                  <div style={{ display: 'flex', gap: '0.5rem' }}>
+                    {showAddWarehouse ? (
+                      <div style={{ display: 'flex', gap: '0.4rem', width: '100%' }}>
+                        <input className="input-field" style={{ flex: 1, height: '48px', borderRadius: '12px' }} value={newWarehouseName} onChange={e => setNewWarehouseName(e.target.value)} autoFocus placeholder="Yangi ombor nomi..." />
+                        <button className="btn btn-primary btn-sm" onClick={handleAddWarehouse} style={{ borderRadius: '12px', padding: '0 1rem' }}>OK</button>
+                        <button className="btn btn-outline btn-sm" onClick={() => setShowAddWarehouse(false)} style={{ borderRadius: '12px', padding: '0 1rem' }}>X</button>
+                      </div>
+                    ) : (
+                      <>
+                        <select className="input-field" style={{ flex: 1, height: '48px', borderRadius: '12px' }} value={form.warehouseId} onChange={e => setForm(f => ({ ...f, warehouseId: e.target.value }))}>
+                          {warehouses.length === 0 && <option value="">Omborlar yo'q</option>}
+                          {warehouses.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}
+                        </select>
+                        <button className="btn btn-outline btn-icon" title="Yangi ombor qo'shish" style={{ height: '48px', width: '48px', borderRadius: '12px' }} onClick={() => setShowAddWarehouse(true)}><Plus size={18} /></button>
+                      </>
+                    )}
+                  </div>
                 </div>
-                <div className="form-group">
+                <div className="form-group" style={{ gridColumn: 'span 1' }}>
                   <label className="form-label" style={{ fontWeight: 700 }}>Mavjud miqdor</label>
                   <input type="number" className="input-field" value={form.stock} onChange={e => setForm(f => ({ ...f, stock: e.target.value }))} style={{ height: '48px', borderRadius: '12px' }} />
                 </div>
-                <div className="form-group">
+                <div className="form-group" style={{ gridColumn: 'span 2' }}>
                   <label className="form-label" style={{ fontWeight: 700 }}>Minimal qoldiq</label>
                   <input type="number" className="input-field" value={form.minStock} onChange={e => setForm(f => ({ ...f, minStock: e.target.value }))} style={{ height: '48px', borderRadius: '12px' }} />
                 </div>
