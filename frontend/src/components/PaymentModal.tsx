@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { X, CheckCircle, CreditCard, Banknote, DollarSign } from 'lucide-react';
 import api from '../api/axios';
 import { Customer } from '../types';
+import useToast from '../store/useToast';
 
 interface PaymentModalProps {
   sale: {
@@ -15,6 +16,7 @@ interface PaymentModalProps {
 }
 
 export default function PaymentModal({ sale, customers, onClose, onConfirmed }: PaymentModalProps) {
+  const toast = useToast();
   const [method, setMethod] = useState('cash');
   const [cashAmount, setCashAmount] = useState(sale.subtotal.toString());
   const [cardAmount, setCardAmount] = useState('');
@@ -55,7 +57,7 @@ export default function PaymentModal({ sale, customers, onClose, onConfirmed }: 
     else finalDebt = dAmt;
 
     if (finalDebt > 0 && !customerId) {
-        alert("Qarzga yozish uchun mijoz tanlash majburiy!");
+        toast.warning("Qarzga yozish uchun mijoz tanlash majburiy!");
         return;
     }
 
@@ -82,7 +84,7 @@ export default function PaymentModal({ sale, customers, onClose, onConfirmed }: 
         const res = await api.post('/sales', p);
         onConfirmed(res, print);
     } catch (err) {
-        alert(typeof err === 'string' ? err : "To'lovni saqlashda xatolik");
+        toast.error(typeof err === 'string' ? err : "To'lovni saqlashda xatolik");
     } finally {
         setLoading(false);
     }
@@ -95,8 +97,8 @@ export default function PaymentModal({ sale, customers, onClose, onConfirmed }: 
   };
 
   return (
-    <div className="modal-overlay" onClick={onClose} style={{ zIndex: 1100 }}>
-      <div className="modal-content modal-md" onClick={e => e.stopPropagation()}>
+    <div className="modal-overlay" onClick={onClose} style={{ background: 'transparent' }}>
+      <div className="modal-content modal-md" onClick={e => e.stopPropagation()} style={{ background: '#fff', border: '1px solid var(--border)', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)' }}>
          <div className="modal-header">
             <h2 style={{ fontSize: '1.25rem', fontWeight: 800 }}>To'lovni tasdiqlash</h2>
             <button className="btn btn-ghost btn-icon" onClick={onClose}><X size={20} /></button>

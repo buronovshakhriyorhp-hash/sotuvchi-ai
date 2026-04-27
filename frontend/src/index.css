@@ -40,8 +40,9 @@
   --glass: rgba(255, 255, 255, 0.85);
   --glass-border: rgba(255, 255, 255, 0.7);
   --glass-blur: blur(20px);
-
+  
   --sidebar-width: 270px;
+  --sidebar-collapsed-width: 80px;
   --navbar-height: 72px;
   --radius-sm: 0.5rem;
   --radius: 0.75rem;
@@ -148,12 +149,12 @@ body {
 
 /* ===== ANIMATIONS ===== */
 @keyframes fadeUp {
-  from { opacity: 0; transform: translateY(16px); }
-  to   { opacity: 1; transform: none; }
+  from { opacity: 0; }
+  to   { opacity: 1; }
 }
 @keyframes slideIn {
-  from { opacity: 0; transform: translateX(-12px); }
-  to   { opacity: 1; transform: none; }
+  from { opacity: 0; }
+  to   { opacity: 1; }
 }
 @keyframes shimmer {
   0% { background-position: -1000px 0; }
@@ -164,20 +165,20 @@ body {
   50% { opacity: 0.8; transform: scale(0.995); }
 }
 @keyframes slideUp {
-  from { opacity: 0; transform: translateY(100%); }
-  to   { opacity: 1; transform: none; }
+  from { opacity: 0; }
+  to   { opacity: 1; }
 }
 @keyframes slideDown {
   from { opacity: 1; transform: none; }
   to   { opacity: 0; transform: translateY(100%); }
 }
 @keyframes slideInRight {
-  from { transform: translateX(100%); }
-  to   { transform: none; }
+  from { opacity: 0; }
+  to   { opacity: 1; }
 }
 
-.fade-in  { animation: fadeUp 0.4s var(--ease-out); }
-.slide-in { animation: slideIn 0.3s var(--ease-out); }
+.fade-in  { /* animation removed by user request to fix chrome composite clipping */ }
+.slide-in { /* animation removed */ }
 
 .skeleton {
   background: linear-gradient(90deg, #f1f5f9 25%, #e2e8f0 50%, #f1f5f9 75%);
@@ -303,8 +304,19 @@ body {
   flex-direction: column;
   height: 100%;
   z-index: 20;
-  transition: transform var(--duration) var(--ease);
+  transition: width var(--duration) var(--ease), transform var(--duration) var(--ease);
   flex-shrink: 0;
+  overflow-x: hidden;
+}
+
+.sidebar.collapsed {
+  width: var(--sidebar-collapsed-width);
+}
+
+.mobile-only { display: none; }
+@media (max-width: 768px) {
+  .mobile-only { display: flex; }
+  .nav-desktop { display: none; }
 }
 
 .sidebar-header {
@@ -1245,13 +1257,14 @@ body {
 /* ===== MODAL TIZIMI ===== */
 .modal-overlay {
   position: fixed; inset: 0;
-  background: rgba(15,23,42,0.35);
-  backdrop-filter: blur(2px);
+  background: rgba(15,23,42,0.6);
   z-index: 200;
-  display: flex; align-items: center; justify-content: center;
-  padding: 1.5rem;
+  display: flex; 
+  align-items: flex-start; /* Better for long modals */
+  justify-content: center;
+  padding: 2rem 1rem;
   overflow-y: auto;
-  animation: fadeUp 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  -webkit-overflow-scrolling: touch;
 }
 
 .drawer-overlay {
@@ -1281,13 +1294,13 @@ body {
   box-shadow: var(--shadow-xl);
   width: 100%;
   max-width: 520px;
-  max-height: calc(100vh - 3rem);
+  /* Ensure it doesn't get trapped by fixed height */
+  margin: 0 auto;
   display: flex;
   flex-direction: column;
-  overflow: hidden;
   position: relative;
   border: 1px solid rgba(255,255,255,0.2);
-  margin: auto;
+  min-height: min-content;
 }
 
 .modal-sm { max-width: 420px; }
@@ -1554,7 +1567,6 @@ body {
     max-height: 94vh !important;
     border-radius: 1.75rem 1.75rem 0 0 !important;
     margin: 0 !important;
-    animation: slideUp 0.35s cubic-bezier(0.16, 1, 0.3, 1);
     box-shadow: 0 -10px 40px rgba(0,0,0,0.15);
   }
   

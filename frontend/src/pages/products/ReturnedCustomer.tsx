@@ -134,7 +134,7 @@ export default function ReturnedCustomer() {
       {/* Modal */}
       {modalOpen && (
         <div className="modal-overlay">
-          <div className="modal-content animate-slide-up" style={{ maxWidth:'450px' }}>
+          <div className="modal-content fade-in" style={{ maxWidth:'450px' }}>
             <div className="modal-header">
               <h2 className="modal-title">Qaytarishni rasmiylashtirish</h2>
               <button className="btn-icon" onClick={() => setModalOpen(false)}><XCircle size={20}/></button>

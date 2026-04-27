@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, ChangeEvent } from 'react';
-import { X, Upload, RefreshCw, Plus, ImageOff, Package, Tag, Barcode, DollarSign, Layers, Info, Loader2 } from 'lucide-react';
+import { X, Upload, RefreshCw, Plus, Save } from 'lucide-react';
 import { Category, Product, Warehouse } from '../types';
 import { categoryService } from '../services/category.service';
 import { productService } from '../services/product.service';
@@ -30,11 +30,14 @@ interface ProductForm {
   warehouseId: string;
 }
 
+type TabType = 'mahsulot' | 'narxi' | 'ombor';
+
 export default function AddProductModal({ onClose, onSaved, editProduct = null }: AddProductModalProps) {
   const [categories, setCategories] = useState<Category[]>([]);
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [activeTab, setActiveTab] = useState<TabType>('mahsulot');
   const fileRef = useRef<HTMLInputElement>(null);
 
   const [form, setForm] = useState<ProductForm>({
@@ -42,7 +45,7 @@ export default function AddProductModal({ onClose, onSaved, editProduct = null }
     name: '',
     categoryId: '',
     unit: 'dona',
-    packageName: "qut,paket,o'ram",
+    packageName: "quti, paket, o'ram",
     packageQty: '',
     packageWeight: '',
     barcode: '',
@@ -63,6 +66,12 @@ export default function AddProductModal({ onClose, onSaved, editProduct = null }
 
   const [showAddWarehouse, setShowAddWarehouse] = useState(false);
   const [newWarehouseName, setNewWarehouseName] = useState('');
+
+  const tabs: { id: TabType; label: string }[] = [
+    { id: 'mahsulot', label: 'Mahsulot nomi' },
+    { id: 'narxi', label: 'Narxi' },
+    { id: 'ombor', label: 'Ombor' },
+  ];
 
   const handleAddWarehouse = async () => {
     if (!newWarehouseName.trim()) return;
@@ -275,250 +284,804 @@ export default function AddProductModal({ onClose, onSaved, editProduct = null }
     }
   };
 
-  return (
-    <div className="modal-overlay" onClick={onClose} style={{ backdropFilter: 'blur(10px)', background: 'rgba(15, 23, 42, 0.4)' }}>
-      <div 
-        className="modal-content modal-lg fade-in" 
-        onClick={e => e.stopPropagation()} 
-        style={{ 
-          maxWidth: '1000px', borderRadius: '28px', padding: 0, overflow: 'hidden',
-          background: 'rgba(255, 255, 255, 0.98)', border: '1px solid rgba(255, 255, 255, 0.4)',
-          boxShadow: '0 30px 60px -12px rgba(0,0,0,0.3)'
-        }}
-      >
-        {/* Header */}
-        <div style={{ padding: '1.5rem 2rem', background: '#fff', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-            <div style={{ background: 'var(--primary-bg)', color: 'var(--primary-dark)', width: '42px', height: '42px', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <Package size={22} />
-            </div>
-            <div>
-              <h2 style={{ fontSize: '1.25rem', fontWeight: 800 }}>{editProduct ? 'Mahsulotni tahrirlash' : "Yangi mahsulot qo'shish"}</h2>
-              <p style={{ fontSize: '0.8125rem', color: 'var(--text-muted)' }}>Barcha ma'lumotlarni aniqlik bilan kiriting</p>
-            </div>
-          </div>
-          <button onClick={onClose} className="btn btn-ghost btn-icon" style={{ borderRadius: '12px' }}><X size={20} /></button>
-        </div>
+  const validateForm = (): boolean => {
+    if (!form.name.trim()) { setError('Mahsulot nomi majburiy'); return false; }
+    if (!form.categoryId) { setError('Turkum tanlash majburiy'); return false; }
+    if (!form.sellPrice) { setError('Sotish narxi majburiy'); return false; }
+    if (!form.barcode) { setError('Shtrix kod majburiy'); return false; }
+    return true;
+  };
 
-        {/* Global Error */}
+  return (
+    <div style={{
+      position: 'fixed',
+      top: 0,
+      left: 0,
+      width: '100%',
+      height: '100vh',
+      background: 'white',
+      zIndex: 1000,
+      display: 'flex',
+      flexDirection: 'column',
+      fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif'
+    }}>
+      {/* Header */}
+      <div style={{
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        padding: '20px 40px',
+        borderBottom: '1px solid #e5e5e5',
+        background: 'white',
+        position: 'sticky',
+        top: 0,
+        zIndex: 10
+      }}>
+        <h1 style={{ fontSize: '24px', fontWeight: 600, color: '#333', margin: 0 }}>
+          {editProduct ? 'Mahsulotni tahrirlash' : "Yangi mahsulot qo'shish"}
+        </h1>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
+          <button
+            onClick={handleSave}
+            disabled={loading}
+            style={{
+              padding: '10px 24px',
+              border: 'none',
+              borderRadius: '8px',
+              fontSize: '15px',
+              fontWeight: 500,
+              cursor: loading ? 'not-allowed' : 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              background: '#9333ea',
+              color: 'white',
+              opacity: loading ? 0.7 : 1
+            }}
+          >
+            {loading ? (
+              <span>Yuklanmoqda...</span>
+            ) : (
+              <>
+                <Save size={16} />
+                Saqlash
+              </>
+            )}
+          </button>
+          <button
+            onClick={() => {
+              if (confirm("Haqiqatan ham yopmoqchimisiz? Saqlanmagan o'zgarishlar yo'qoladi.")) {
+                onClose();
+              }
+            }}
+            style={{
+              background: 'transparent',
+              border: 'none',
+              fontSize: '24px',
+              cursor: 'pointer',
+              color: '#666',
+              padding: '5px',
+              width: '32px',
+              height: '32px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              borderRadius: '4px'
+            }}
+          >
+            <X size={24} />
+          </button>
+        </div>
+      </div>
+
+      {/* Content */}
+      <div style={{ flex: 1, overflowY: 'auto', padding: '30px 40px', background: '#fafafa' }}>
+        {/* Error */}
         {error && (
-          <div style={{ background: '#fef2f2', borderBottom: '1px solid #fca5a5', color: '#991b1b', padding: '1rem 2rem', fontSize: '0.875rem', fontWeight: 600 }}>
+          <div style={{
+            background: '#fef2f2',
+            border: '1px solid #fca5a5',
+            color: '#991b1b',
+            padding: '12px 16px',
+            borderRadius: '8px',
+            marginBottom: '20px',
+            fontSize: '14px',
+            fontWeight: 500
+          }}>
             ⚠️ {error}
           </div>
         )}
 
-        {/* Body content */}
-        <div style={{ padding: '2rem', display: 'grid', gridTemplateColumns: '1fr 340px', gap: '2.5rem', maxHeight: '75vh', overflowY: 'auto' }}>
-          
-          {/* LEFT COLUMN: Main Info */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
-            
-            {/* Section 1: General */}
-            <div style={{ background: '#f8fafc', padding: '1.5rem', borderRadius: '20px', border: '1px solid var(--border)' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1.25rem', color: 'var(--primary-dark)' }}>
-                <Info size={18} /> <span style={{ fontWeight: 800, fontSize: '0.875rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Umumiy ma'lumotlar</span>
-              </div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr', gap: '1.25rem', marginBottom: '1.25rem' }}>
-                <div className="form-group">
-                  <label className="form-label" style={{ fontWeight: 700 }}>Mahsulot nomi <span style={{ color: 'var(--danger)' }}>*</span></label>
-                  <input
-                    className="input-field"
-                    value={form.name}
-                    onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
-                    placeholder="Masalan: Nike Air Max 270"
-                    style={{ height: '48px', borderRadius: '12px' }}
-                  />
-                </div>
-                <div className="form-group">
-                  <label className="form-label" style={{ fontWeight: 700 }}>SKU</label>
-                  <input
-                    className="input-field"
-                    value={form.sku}
-                    onChange={e => setForm(f => ({ ...f, sku: e.target.value }))}
-                    placeholder="Avto-generatsiya"
-                    style={{ height: '48px', borderRadius: '12px', background: '#fff' }}
-                  />
-                </div>
-              </div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.25rem' }}>
-                <div className="form-group">
-                  <label className="form-label" style={{ fontWeight: 700 }}>Turkum <span style={{ color: 'var(--danger)' }}>*</span></label>
-                  <div style={{ display: 'flex', gap: '0.5rem' }}>
-                    {showAddCategory ? (
-                      <div style={{ display: 'flex', gap: '0.4rem', width: '100%' }}>
-                        <input className="input-field" style={{ flex: 1, height: '42px', borderRadius: '10px' }} value={newCategoryName} onChange={e => setNewCategoryName(e.target.value)} autoFocus />
-                        <button className="btn btn-primary btn-sm" onClick={handleAddCategory}>OK</button>
-                        <button className="btn btn-outline btn-sm" onClick={() => setShowAddCategory(false)}>X</button>
-                      </div>
-                    ) : (
-                      <>
-                        <select className="input-field" style={{ flex: 1, height: '42px', borderRadius: '10px' }} value={form.categoryId} onChange={e => setForm(f => ({ ...f, categoryId: e.target.value }))}>
-                          <option value="">Tanlang</option>
-                          {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                        </select>
-                        <button className="btn btn-outline btn-icon" style={{ height: '42px', width: '42px', borderRadius: '10px' }} onClick={() => setShowAddCategory(true)}><Plus size={18} /></button>
-                      </>
-                    )}
-                  </div>
-                </div>
-                <div className="form-group">
-                  <label className="form-label" style={{ fontWeight: 700 }}>O'lchov birligi</label>
-                  <input className="input-field" style={{ height: '42px', borderRadius: '10px' }} value={form.unit} onChange={e => setForm(f => ({ ...f, unit: e.target.value }))} placeholder="dona" />
-                </div>
-              </div>
-            </div>
+        {/* Tabs */}
+        <div style={{
+          display: 'flex',
+          gap: '8px',
+          marginBottom: '30px',
+          background: 'white',
+          padding: '8px',
+          borderRadius: '10px',
+          boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+          width: 'fit-content'
+        }}>
+          {tabs.map((tab) => (
+            <button
+              key={tab.id}
+              onClick={() => { setActiveTab(tab.id); setError(''); }}
+              style={{
+                padding: '12px 24px',
+                background: activeTab === tab.id ? '#9333ea' : 'transparent',
+                border: 'none',
+                borderRadius: '6px',
+                cursor: 'pointer',
+                fontSize: '15px',
+                fontWeight: 500,
+                color: activeTab === tab.id ? 'white' : '#666',
+                transition: 'all 0.2s'
+              }}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
 
-            {/* Section 2: Pricing */}
-            <div style={{ background: '#f8fafc', padding: '1.5rem', borderRadius: '20px', border: '1px solid var(--border)' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1.25rem', color: 'var(--primary-dark)' }}>
-                <DollarSign size={18} /> <span style={{ fontWeight: 800, fontSize: '0.875rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Narx va moliya</span>
+        {/* Tab 1: Mahsulot nomi */}
+        {activeTab === 'mahsulot' && (
+          <div style={{
+            background: 'white',
+            padding: '30px',
+            borderRadius: '12px',
+            boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
+          }}>
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(3, 1fr)',
+              gap: '24px 20px'
+            }}>
+              {/* Mahsulot nomi */}
+              <div style={{ gridColumn: 'span 2', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                <label style={{ fontSize: '14px', fontWeight: 500, color: '#333' }}>
+                  Mahsulot nomi <span style={{ color: '#ef4444' }}>*</span>
+                </label>
+                <input
+                  type="text"
+                  placeholder="Mahsulot nomini kiriting"
+                  value={form.name}
+                  onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
+                  style={{
+                    padding: '10px 14px',
+                    border: '1px solid #d1d5db',
+                    borderRadius: '6px',
+                    fontSize: '14px',
+                    outline: 'none'
+                  }}
+                />
               </div>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1.25rem' }}>
-                <div className="form-group">
-                  <label className="form-label" style={{ fontWeight: 700 }}>Sotuv narxi <span style={{ color: 'var(--danger)' }}>*</span></label>
-                  <div style={{ position: 'relative' }}>
-                    <input type="number" className="input-field" value={form.sellPrice} onChange={e => setForm(f => ({ ...f, sellPrice: e.target.value }))} style={{ height: '48px', borderRadius: '12px', border: !form.sellPrice ? '2px solid #fee2e2' : '1px solid var(--border)' }} />
-                  </div>
-                </div>
-                <div className="form-group">
-                  <label className="form-label" style={{ fontWeight: 700 }}>Ulgurji narxi</label>
-                  <input type="number" className="input-field" value={form.wholesalePrice} onChange={e => setForm(f => ({ ...f, wholesalePrice: e.target.value }))} style={{ height: '48px', borderRadius: '12px' }} />
-                </div>
-                <div className="form-group">
-                  <label className="form-label" style={{ fontWeight: 700 }}>Tannarxi</label>
-                  <input type="number" className="input-field" value={form.costPrice} onChange={e => setForm(f => ({ ...f, costPrice: e.target.value }))} style={{ height: '48px', borderRadius: '12px' }} />
-                </div>
-              </div>
-            </div>
 
-            {/* Section 3: Inventory */}
-            <div style={{ background: '#f8fafc', padding: '1.5rem', borderRadius: '20px', border: '1px solid var(--border)' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1.25rem', color: 'var(--primary-dark)' }}>
-                <Barcode size={18} /> <span style={{ fontWeight: 800, fontSize: '0.875rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Inventar va Shtrix-kod</span>
+              {/* Turkum */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                <label style={{ fontSize: '14px', fontWeight: 500, color: '#333' }}>Turkum</label>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  {showAddCategory ? (
+                    <>
+                      <input
+                        type="text"
+                        placeholder="Yangi turkum"
+                        value={newCategoryName}
+                        onChange={e => setNewCategoryName(e.target.value)}
+                        autoFocus
+                        style={{
+                          flex: 1,
+                          padding: '10px 14px',
+                          border: '1px solid #d1d5db',
+                          borderRadius: '6px',
+                          fontSize: '14px',
+                          outline: 'none'
+                        }}
+                      />
+                      <button
+                        onClick={handleAddCategory}
+                        style={{
+                          padding: '10px 16px',
+                          background: '#9333ea',
+                          color: 'white',
+                          border: 'none',
+                          borderRadius: '6px',
+                          cursor: 'pointer',
+                          fontSize: '14px',
+                          fontWeight: 500
+                        }}
+                      >
+                        OK
+                      </button>
+                      <button
+                        onClick={() => setShowAddCategory(false)}
+                        style={{
+                          padding: '10px 16px',
+                          background: '#f3f4f6',
+                          color: '#666',
+                          border: '1px solid #d1d5db',
+                          borderRadius: '6px',
+                          cursor: 'pointer',
+                          fontSize: '14px'
+                        }}
+                      >
+                        X
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <select
+                        value={form.categoryId}
+                        onChange={e => setForm(f => ({ ...f, categoryId: e.target.value }))}
+                        style={{
+                          flex: 1,
+                          padding: '10px 14px',
+                          border: '1px solid #d1d5db',
+                          borderRadius: '6px',
+                          fontSize: '14px',
+                          outline: 'none',
+                          cursor: 'pointer',
+                          appearance: 'none',
+                          backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23666' d='M6 9L1 4h10z'/%3E%3C/svg%3E")`,
+                          backgroundRepeat: 'no-repeat',
+                          backgroundPosition: 'right 12px center',
+                          paddingRight: '36px'
+                        }}
+                      >
+                        <option value="">Turkumni tanlang</option>
+                        {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                      </select>
+                      <button
+                        onClick={() => setShowAddCategory(true)}
+                        title="Yangi turkum qo'shish"
+                        style={{
+                          width: '40px',
+                          height: '40px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          border: '1px solid #d1d5db',
+                          background: 'white',
+                          borderRadius: '6px',
+                          cursor: 'pointer',
+                          fontSize: '18px',
+                          color: '#666'
+                        }}
+                      >
+                        <Plus size={18} />
+                      </button>
+                    </>
+                  )}
+                </div>
               </div>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1.25rem', marginBottom: '1.25rem' }}>
-                <div className="form-group" style={{ gridColumn: 'span 3' }}>
-                  <label className="form-label" style={{ fontWeight: 700 }}>Ombor qo'shish yoki tanlash</label>
-                  <div style={{ display: 'flex', gap: '0.5rem' }}>
-                    {showAddWarehouse ? (
-                      <div style={{ display: 'flex', gap: '0.4rem', width: '100%' }}>
-                        <input className="input-field" style={{ flex: 1, height: '48px', borderRadius: '12px' }} value={newWarehouseName} onChange={e => setNewWarehouseName(e.target.value)} autoFocus placeholder="Yangi ombor nomi..." />
-                        <button className="btn btn-primary btn-sm" onClick={handleAddWarehouse} style={{ borderRadius: '12px', padding: '0 1rem' }}>OK</button>
-                        <button className="btn btn-outline btn-sm" onClick={() => setShowAddWarehouse(false)} style={{ borderRadius: '12px', padding: '0 1rem' }}>X</button>
-                      </div>
-                    ) : (
-                      <>
-                        <select className="input-field" style={{ flex: 1, height: '48px', borderRadius: '12px' }} value={form.warehouseId} onChange={e => setForm(f => ({ ...f, warehouseId: e.target.value }))}>
-                          {warehouses.length === 0 && <option value="">Omborlar yo'q</option>}
-                          {warehouses.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}
-                        </select>
-                        <button className="btn btn-outline btn-icon" title="Yangi ombor qo'shish" style={{ height: '48px', width: '48px', borderRadius: '12px' }} onClick={() => setShowAddWarehouse(true)}><Plus size={18} /></button>
-                      </>
-                    )}
-                  </div>
-                </div>
-                <div className="form-group" style={{ gridColumn: 'span 1' }}>
-                  <label className="form-label" style={{ fontWeight: 700 }}>Mavjud miqdor</label>
-                  <input type="number" className="input-field" value={form.stock} onChange={e => setForm(f => ({ ...f, stock: e.target.value }))} style={{ height: '48px', borderRadius: '12px' }} />
-                </div>
-                <div className="form-group" style={{ gridColumn: 'span 2' }}>
-                  <label className="form-label" style={{ fontWeight: 700 }}>Minimal qoldiq</label>
-                  <input type="number" className="input-field" value={form.minStock} onChange={e => setForm(f => ({ ...f, minStock: e.target.value }))} style={{ height: '48px', borderRadius: '12px' }} />
-                </div>
+
+              {/* Section divider */}
+              <div style={{
+                gridColumn: '1 / -1',
+                fontSize: '16px',
+                fontWeight: 600,
+                color: '#9333ea',
+                margin: '10px 0 0 0',
+                paddingBottom: '10px',
+                borderBottom: '2px solid #9333ea'
+              }}>
+                O'lchov birligi
               </div>
-              <div className="form-group">
-                <label className="form-label" style={{ fontWeight: 700 }}>Shtrix-kod <span style={{ color: 'var(--danger)' }}>*</span></label>
-                <div style={{ display: 'flex', gap: '0.5rem' }}>
-                  <input className="input-field" style={{ flex: 1, height: '48px', borderRadius: '12px', fontSize: '1.125rem', letterSpacing: '0.1em', fontWeight: 600 }} value={form.barcode} onChange={e => setForm(f => ({ ...f, barcode: e.target.value }))} />
-                  <button className="btn btn-primary" onClick={generateBarcode} style={{ borderRadius: '12px', whiteSpace: 'nowrap', gap: '0.5rem' }}><RefreshCw size={16} /> Auto</button>
-                </div>
+
+              {/* O'lchov birligi */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                <label style={{ fontSize: '14px', fontWeight: 500, color: '#333' }}>
+                  O'lchov birligi <span style={{ color: '#ef4444' }}>*</span>
+                </label>
+                <input
+                  type="text"
+                  placeholder="dona"
+                  value={form.unit}
+                  onChange={e => setForm(f => ({ ...f, unit: e.target.value }))}
+                  style={{
+                    padding: '10px 14px',
+                    border: '1px solid #d1d5db',
+                    borderRadius: '6px',
+                    fontSize: '14px',
+                    outline: 'none'
+                  }}
+                />
+              </div>
+
+              {/* O'ramlar nomi */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                <label style={{ fontSize: '14px', fontWeight: 500, color: '#333' }}>O'ramlar nomi</label>
+                <input
+                  type="text"
+                  placeholder="quti, paket, o'ram"
+                  value={form.packageName}
+                  onChange={e => setForm(f => ({ ...f, packageName: e.target.value }))}
+                  style={{
+                    padding: '10px 14px',
+                    border: '1px solid #d1d5db',
+                    borderRadius: '6px',
+                    fontSize: '14px',
+                    outline: 'none'
+                  }}
+                />
+              </div>
+
+              {/* O'ramlar soni */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                <label style={{ fontSize: '14px', fontWeight: 500, color: '#333' }}>O'ramlar soni</label>
+                <input
+                  type="number"
+                  placeholder="0"
+                  value={form.packageQty}
+                  onChange={e => setForm(f => ({ ...f, packageQty: e.target.value }))}
+                  style={{
+                    padding: '10px 14px',
+                    border: '1px solid #d1d5db',
+                    borderRadius: '6px',
+                    fontSize: '14px',
+                    outline: 'none'
+                  }}
+                />
+              </div>
+
+              {/* O'ram og'irligi */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                <label style={{ fontSize: '14px', fontWeight: 500, color: '#333' }}>O'ram og'irligi</label>
+                <input
+                  type="text"
+                  placeholder="kg"
+                  value={form.packageWeight}
+                  onChange={e => setForm(f => ({ ...f, packageWeight: e.target.value }))}
+                  style={{
+                    padding: '10px 14px',
+                    border: '1px solid #d1d5db',
+                    borderRadius: '6px',
+                    fontSize: '14px',
+                    outline: 'none'
+                  }}
+                />
+              </div>
+
+              {/* SKU */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                <label style={{ fontSize: '14px', fontWeight: 500, color: '#333' }}>SKU (Artikul)</label>
+                <input
+                  type="text"
+                  placeholder="Kod kiriting"
+                  value={form.sku}
+                  onChange={e => setForm(f => ({ ...f, sku: e.target.value }))}
+                  style={{
+                    padding: '10px 14px',
+                    border: '1px solid #d1d5db',
+                    borderRadius: '6px',
+                    fontSize: '14px',
+                    outline: 'none'
+                  }}
+                />
               </div>
             </div>
           </div>
+        )}
 
-          {/* RIGHT COLUMN: Media & Extra */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
-            
-            {/* Image Upload */}
-            <div style={{ background: '#fff', padding: '1.5rem', borderRadius: '24px', border: '2px dashed var(--border)', textAlign: 'center' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1rem', color: 'var(--text-muted)' }}>
-                <Tag size={16} /> <span style={{ fontWeight: 800, fontSize: '0.75rem', textTransform: 'uppercase' }}>Mahsulot rasmi</span>
+        {/* Tab 2: Narxi */}
+        {activeTab === 'narxi' && (
+          <div style={{
+            background: 'white',
+            padding: '30px',
+            borderRadius: '12px',
+            boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
+          }}>
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(3, 1fr)',
+              gap: '24px 20px'
+            }}>
+              {/* Sotish narxi */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                <label style={{ fontSize: '14px', fontWeight: 500, color: '#333' }}>
+                  Sotish narxi <span style={{ color: '#ef4444' }}>*</span>
+                </label>
+                <input
+                  type="number"
+                  placeholder="0.00"
+                  value={form.sellPrice}
+                  onChange={e => setForm(f => ({ ...f, sellPrice: e.target.value }))}
+                  style={{
+                    padding: '10px 14px',
+                    border: '1px solid #d1d5db',
+                    borderRadius: '6px',
+                    fontSize: '14px',
+                    outline: 'none'
+                  }}
+                />
               </div>
-              <input ref={fileRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={handleImageChange} />
-              
-              <div 
-                onClick={() => fileRef.current?.click()}
-                style={{ 
-                  width: '100%', height: '220px', background: '#f8fafc', borderRadius: '18px',
-                  display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-                  cursor: 'pointer', transition: 'all 0.3s', border: '1px solid var(--border)',
-                  overflow: 'hidden'
-                }}
-              >
-                {imagePreview ? (
-                  <div style={{ position: 'relative', width: '100%', height: '100%' }}>
-                    <img src={imagePreview} alt="Preview" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
-                    <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, padding: '0.5rem', background: 'rgba(0,0,0,0.5)', color: '#fff', fontSize: '0.75rem' }}>
-                      Rasmni almashtirish uchun bosing
-                    </div>
-                  </div>
-                ) : (
-                  <>
-                    <div style={{ background: '#fff', width: '54px', height: '54px', borderRadius: '50%', boxShadow: 'var(--shadow-sm)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '0.75rem' }}>
-                      <Upload size={24} color="var(--primary)" />
-                    </div>
-                    <span style={{ fontSize: '0.85rem', fontWeight: 600 }}>Rasm yuklash</span>
-                    <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>Maks 5MB (JPG, PNG, WebP)</span>
-                  </>
+
+              {/* Ulgurji narxi */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                <label style={{ fontSize: '14px', fontWeight: 500, color: '#333' }}>Ulgurji narxi</label>
+                <input
+                  type="number"
+                  placeholder="0.00"
+                  value={form.wholesalePrice}
+                  onChange={e => setForm(f => ({ ...f, wholesalePrice: e.target.value }))}
+                  style={{
+                    padding: '10px 14px',
+                    border: '1px solid #d1d5db',
+                    borderRadius: '6px',
+                    fontSize: '14px',
+                    outline: 'none'
+                  }}
+                />
+              </div>
+
+              {/* Sotib olingan narxi */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                <label style={{ fontSize: '14px', fontWeight: 500, color: '#333' }}>Sotib olingan narxi</label>
+                <input
+                  type="number"
+                  placeholder="0.00"
+                  value={form.costPrice}
+                  onChange={e => setForm(f => ({ ...f, costPrice: e.target.value }))}
+                  style={{
+                    padding: '10px 14px',
+                    border: '1px solid #d1d5db',
+                    borderRadius: '6px',
+                    fontSize: '14px',
+                    outline: 'none'
+                  }}
+                />
+              </div>
+
+              {/* Toggle */}
+              <div style={{ gridColumn: '1 / -1', display: 'flex', alignItems: 'center', gap: '12px', marginTop: '8px' }}>
+                <label style={{ position: 'relative', width: '48px', height: '24px', cursor: 'pointer' }}>
+                  <input
+                    type="checkbox"
+                    checked={form.syncCostToWarehouses}
+                    onChange={e => setForm(f => ({ ...f, syncCostToWarehouses: e.target.checked }))}
+                    style={{ opacity: 0, width: 0, height: 0 }}
+                  />
+                  <span style={{
+                    position: 'absolute',
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    background: form.syncCostToWarehouses ? '#9333ea' : '#d1d5db',
+                    borderRadius: '24px',
+                    transition: '0.3s'
+                  }}>
+                    <span style={{
+                      position: 'absolute',
+                      height: '18px',
+                      width: '18px',
+                      left: form.syncCostToWarehouses ? '27px' : '3px',
+                      bottom: '3px',
+                      background: 'white',
+                      borderRadius: '50%',
+                      transition: '0.3s'
+                    }} />
+                  </span>
+                </label>
+                <span style={{ fontSize: '14px', color: '#666' }}>Boshqa omborlarga ham sotib olingan narxni biriktirish</span>
+              </div>
+
+              {/* Section divider */}
+              <div style={{
+                gridColumn: '1 / -1',
+                fontSize: '16px',
+                fontWeight: 600,
+                color: '#9333ea',
+                margin: '20px 0 0 0',
+                paddingBottom: '10px',
+                borderBottom: '2px solid #9333ea'
+              }}>
+                Mahsulot rasmi
+              </div>
+
+              {/* Image upload */}
+              <div style={{ gridColumn: '1 / -1' }}>
+                <input ref={fileRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={handleImageChange} />
+                <div
+                  onClick={() => fileRef.current?.click()}
+                  style={{
+                    border: '2px dashed #d1d5db',
+                    borderRadius: '8px',
+                    padding: '40px',
+                    textAlign: 'center',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s',
+                    background: imagePreview ? 'white' : '#fafafa'
+                  }}
+                >
+                  {imagePreview ? (
+                    <img src={imagePreview} alt="Preview" style={{ maxWidth: '100%', maxHeight: '200px', objectFit: 'contain' }} />
+                  ) : (
+                    <>
+                      <Upload size={48} color="#9ca3af" style={{ margin: '0 auto 12px' }} />
+                      <div style={{ fontSize: '14px', color: '#666' }}>Mahsulotga rasm yuklash</div>
+                    </>
+                  )}
+                </div>
+                {imagePreview && (
+                  <button
+                    onClick={() => { setImageFile(null); setImagePreview(null); }}
+                    style={{
+                      marginTop: '10px',
+                      fontSize: '13px',
+                      color: '#ef4444',
+                      background: 'none',
+                      border: 'none',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    Rasmni olib tashlash
+                  </button>
                 )}
               </div>
-              {imagePreview && (
-                <button onClick={e => { e.stopPropagation(); setImageFile(null); setImagePreview(null); }} style={{ marginTop: '0.75rem', background: 'none', border: 'none', color: 'var(--danger)', fontSize: '0.8rem', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.25rem', margin: '0.75rem auto 0' }}><ImageOff size={14} /> Rasmni olib tashlash</button>
-              )}
             </div>
+          </div>
+        )}
 
-            {/* Additional Settings */}
-            <div style={{ background: '#f8fafc', padding: '1.5rem', borderRadius: '20px', border: '1px solid var(--border)' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1.25rem', color: 'var(--primary-dark)' }}>
-                <Layers size={18} /> <span style={{ fontWeight: 800, fontSize: '0.875rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Boshqa sozlamalar</span>
+        {/* Tab 3: Ombor */}
+        {activeTab === 'ombor' && (
+          <div style={{
+            background: 'white',
+            padding: '30px',
+            borderRadius: '12px',
+            boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
+          }}>
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(3, 1fr)',
+              gap: '24px 20px'
+            }}>
+              {/* Section divider */}
+              <div style={{
+                gridColumn: '1 / -1',
+                fontSize: '16px',
+                fontWeight: 600,
+                color: '#9333ea',
+                margin: '0 0 0 0',
+                paddingBottom: '10px',
+                borderBottom: '2px solid #9333ea'
+              }}>
+                Inventar
               </div>
-              <div className="form-group" style={{ marginBottom: '1rem' }}>
-                <label className="form-label" style={{ fontWeight: 700 }}>Mahsulot turi</label>
-                <select className="input-field" style={{ height: '42px', borderRadius: '10px' }} value={form.type} onChange={e => setForm(f => ({ ...f, type: e.target.value }))}>
-                  <option value="Mahsulotlar">Tayyor mahsulot</option>
-                  <option value="Xomashyo">Xomashyo</option>
-                  <option value="Xizmat">Xizmatlar</option>
+
+              {/* Shtrix kod */}
+              <div style={{ gridColumn: 'span 2', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                <label style={{ fontSize: '14px', fontWeight: 500, color: '#333' }}>
+                  Shtrix kod <span style={{ color: '#ef4444' }}>*</span>
+                </label>
+                <div style={{ display: 'flex', gap: '8px', alignItems: 'end' }}>
+                  <input
+                    type="text"
+                    placeholder="1776794215706"
+                    value={form.barcode}
+                    onChange={e => setForm(f => ({ ...f, barcode: e.target.value }))}
+                    style={{
+                      flex: 1,
+                      padding: '10px 14px',
+                      border: '1px solid #d1d5db',
+                      borderRadius: '6px',
+                      fontSize: '14px',
+                      outline: 'none',
+                      fontFamily: 'monospace'
+                    }}
+                  />
+                  <button
+                    onClick={generateBarcode}
+                    style={{
+                      background: '#9333ea',
+                      color: 'white',
+                      padding: '10px 20px',
+                      border: 'none',
+                      borderRadius: '6px',
+                      cursor: 'pointer',
+                      fontSize: '14px',
+                      fontWeight: 500,
+                      whiteSpace: 'nowrap',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px'
+                    }}
+                  >
+                    <RefreshCw size={14} />
+                    EAN13
+                  </button>
+                </div>
+              </div>
+
+              {/* Ombor */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                <label style={{ fontSize: '14px', fontWeight: 500, color: '#333' }}>Ombor</label>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  {showAddWarehouse ? (
+                    <>
+                      <input
+                        type="text"
+                        placeholder="Yangi ombor"
+                        value={newWarehouseName}
+                        onChange={e => setNewWarehouseName(e.target.value)}
+                        autoFocus
+                        style={{
+                          flex: 1,
+                          padding: '10px 14px',
+                          border: '1px solid #d1d5db',
+                          borderRadius: '6px',
+                          fontSize: '14px',
+                          outline: 'none'
+                        }}
+                      />
+                      <button
+                        onClick={handleAddWarehouse}
+                        style={{
+                          padding: '10px 16px',
+                          background: '#9333ea',
+                          color: 'white',
+                          border: 'none',
+                          borderRadius: '6px',
+                          cursor: 'pointer',
+                          fontSize: '14px'
+                        }}
+                      >
+                        OK
+                      </button>
+                      <button
+                        onClick={() => setShowAddWarehouse(false)}
+                        style={{
+                          padding: '10px 16px',
+                          background: '#f3f4f6',
+                          color: '#666',
+                          border: '1px solid #d1d5db',
+                          borderRadius: '6px',
+                          cursor: 'pointer',
+                          fontSize: '14px'
+                        }}
+                      >
+                        X
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <select
+                        value={form.warehouseId}
+                        onChange={e => setForm(f => ({ ...f, warehouseId: e.target.value }))}
+                        style={{
+                          flex: 1,
+                          padding: '10px 14px',
+                          border: '1px solid #d1d5db',
+                          borderRadius: '6px',
+                          fontSize: '14px',
+                          outline: 'none',
+                          cursor: 'pointer',
+                          appearance: 'none',
+                          backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23666' d='M6 9L1 4h10z'/%3E%3C/svg%3E")`,
+                          backgroundRepeat: 'no-repeat',
+                          backgroundPosition: 'right 12px center',
+                          paddingRight: '36px'
+                        }}
+                      >
+                        {warehouses.length === 0 && <option value="">Omborlar yo'q</option>}
+                        {warehouses.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}
+                      </select>
+                      <button
+                        onClick={() => setShowAddWarehouse(true)}
+                        style={{
+                          width: '40px',
+                          height: '40px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          border: '1px solid #d1d5db',
+                          background: 'white',
+                          borderRadius: '6px',
+                          cursor: 'pointer',
+                          fontSize: '18px',
+                          color: '#666'
+                        }}
+                      >
+                        <Plus size={18} />
+                      </button>
+                    </>
+                  )}
+                </div>
+              </div>
+
+              {/* Qoldiq */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                <label style={{ fontSize: '14px', fontWeight: 500, color: '#333' }}>Qoldiq</label>
+                <input
+                  type="text"
+                  placeholder="Mahsulot qoldiq'i"
+                  value={form.stock}
+                  onChange={e => setForm(f => ({ ...f, stock: e.target.value }))}
+                  style={{
+                    padding: '10px 14px',
+                    border: '1px solid #d1d5db',
+                    borderRadius: '6px',
+                    fontSize: '14px',
+                    outline: 'none'
+                  }}
+                />
+              </div>
+
+              {/* Ogohlantiruv */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                <label style={{ fontSize: '14px', fontWeight: 500, color: '#333' }}>Ogohlantiruv</label>
+                <input
+                  type="number"
+                  placeholder="0"
+                  value={form.minStock}
+                  onChange={e => setForm(f => ({ ...f, minStock: e.target.value }))}
+                  style={{
+                    padding: '10px 14px',
+                    border: '1px solid #d1d5db',
+                    borderRadius: '6px',
+                    fontSize: '14px',
+                    outline: 'none'
+                  }}
+                />
+              </div>
+
+              {/* Section divider */}
+              <div style={{
+                gridColumn: '1 / -1',
+                fontSize: '16px',
+                fontWeight: 600,
+                color: '#9333ea',
+                margin: '20px 0 0 0',
+                paddingBottom: '10px',
+                borderBottom: '2px solid #9333ea'
+              }}>
+                Mahsulot yoki xomashyo
+              </div>
+
+              {/* Turi */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                <label style={{ fontSize: '14px', fontWeight: 500, color: '#333' }}>Turi</label>
+                <select
+                  value={form.type}
+                  onChange={e => setForm(f => ({ ...f, type: e.target.value }))}
+                  style={{
+                    padding: '10px 14px',
+                    border: '1px solid #d1d5db',
+                    borderRadius: '6px',
+                    fontSize: '14px',
+                    outline: 'none',
+                    cursor: 'pointer',
+                    appearance: 'none',
+                    backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23666' d='M6 9L1 4h10z'/%3E%3C/svg%3E")`,
+                    backgroundRepeat: 'no-repeat',
+                    backgroundPosition: 'right 12px center',
+                    paddingRight: '36px'
+                  }}
+                >
+                  <option>Mahsulotlar</option>
+                  <option>Xomashyo</option>
+                  <option>Xizmatlar</option>
                 </select>
               </div>
-              <div style={{ display:'flex', alignItems:'center', gap:'0.75rem', padding:'0.75rem', background:'#fff', borderRadius:'12px', border:'1px solid var(--border)' }}>
-                 <div 
-                    onClick={() => setForm(f => ({ ...f, syncCostToWarehouses: !f.syncCostToWarehouses }))}
-                    style={{ 
-                      width: 40, height: 22, borderRadius: 11, background: form.syncCostToWarehouses ? 'var(--primary)' : '#d1d5db',
-                      position: 'relative', cursor: 'pointer', transition: 'all 0.3s'
-                    }}
-                 >
-                   <div style={{ position: 'absolute', top: 2, left: form.syncCostToWarehouses ? 20 : 2, width: 18, height: 18, borderRadius: '50%', background: '#fff', transition: '0.3s' }} />
-                 </div>
-                 <span style={{ fontSize: '0.75rem', fontWeight: 600 }}>Tannarxni barcha omborlarda yangilash</span>
+
+              {/* Saralash */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                <label style={{ fontSize: '14px', fontWeight: 500, color: '#333' }}>Saralash</label>
+                <input
+                  type="number"
+                  value="0"
+                  style={{
+                    padding: '10px 14px',
+                    border: '1px solid #d1d5db',
+                    borderRadius: '6px',
+                    fontSize: '14px',
+                    outline: 'none'
+                  }}
+                />
               </div>
             </div>
-
           </div>
-        </div>
-
-        {/* Footer */}
-        <div style={{ padding: '1.5rem 2rem', background: '#fff', borderTop: '1px solid var(--border)', display: 'flex', justifyContent: 'flex-end', gap: '1rem' }}>
-          <button onClick={onClose} className="btn btn-outline" style={{ height: '52px', padding: '0 2rem', borderRadius: '14px', fontWeight: 700 }}>Bekor qilish</button>
-          <button 
-            onClick={handleSave} 
-            disabled={loading} 
-            className="btn btn-primary" 
-            style={{ height: '52px', padding: '0 3rem', borderRadius: '14px', fontWeight: 800, boxShadow: '0 10px 15px -3px rgba(37, 99, 235, 0.4)' }}
-          >
-            {loading ? <Loader2 className="animate-spin" size={22} /> : '💾 MAHSULOTNI SAQLASH'}
-          </button>
-        </div>
+        )}
       </div>
     </div>
   );

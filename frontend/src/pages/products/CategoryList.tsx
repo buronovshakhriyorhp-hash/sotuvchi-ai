@@ -128,7 +128,7 @@ export default function CategoryList() {
       {/* Modal */}
       {modalOpen && (
         <div
-          style={{ position:'fixed', inset:0, background:'rgba(15,23,42,0.55)', backdropFilter:'blur(4px)', zIndex:200, display:'flex', alignItems:'center', justifyContent:'center', padding:'1rem' }}
+          style={{ position:'fixed', inset:0, background:'rgba(15,23,42,0.55)', zIndex:200, display:'flex', alignItems:'center', justifyContent:'center', padding:'1rem' }}
           onClick={() => setModalOpen(false)}
         >
           <div

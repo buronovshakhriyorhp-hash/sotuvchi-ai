@@ -71,7 +71,7 @@ export default function GlobalSearch({ onClose }: GlobalSearchProps) {
   };
 
   return (
-    <div className="modal-overlay" style={{ alignItems:'flex-start', paddingTop:'10vh' }} onClick={onClose}>
+    <div className="modal-overlay" style={{ alignItems:'flex-start', paddingTop:'10vh', background: 'transparent' }} onClick={onClose}>
       <div style={{ width:'100%', maxWidth:'560px', background:'var(--surface)', borderRadius:'var(--radius-lg)', boxShadow:'var(--shadow-xl)', border:'1px solid var(--border)', overflow:'hidden' }} onClick={e=>e.stopPropagation()}>
         {/* Input */}
         <div style={{ display:'flex', alignItems:'center', gap:'0.875rem', padding:'0 1.25rem', borderBottom:'1px solid var(--border)', height:'56px' }}>

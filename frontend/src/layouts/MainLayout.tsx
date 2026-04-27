@@ -2,13 +2,19 @@ import React, { useState } from 'react';
 import { Outlet, NavLink } from 'react-router-dom';
 import Sidebar from './Sidebar';
 import Navbar from './Navbar';
-import TestModeBanner from '@/components/TestModeBanner';
 
 export default function MainLayout() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [isCollapsed, setIsCollapsed] = useState(localStorage.getItem('sidebar-collapsed') === 'true');
 
   const toggleSidebar = () => {
-    setIsSidebarOpen(prev => !prev);
+    if (window.innerWidth > 768) {
+      const newState = !isCollapsed;
+      setIsCollapsed(newState);
+      localStorage.setItem('sidebar-collapsed', String(newState));
+    } else {
+      setIsSidebarOpen(prev => !prev);
+    }
   };
 
   const closeSidebar = () => {
@@ -36,18 +42,22 @@ export default function MainLayout() {
   }, []);
 
   return (
-    <div className="app-container">
+    <div className={`app-container ${isCollapsed ? 'collapsed' : ''}`}>
       {/* Mobile Sidebar Overlay */}
       <div 
         className={`sidebar-overlay ${isSidebarOpen ? 'open' : ''}`} 
         onClick={closeSidebar}
       />
       
-      <Sidebar isOpen={isSidebarOpen} closeSidebar={closeSidebar} />
+      <Sidebar 
+        isOpen={isSidebarOpen} 
+        isCollapsed={isCollapsed} 
+        toggleCollapse={toggleSidebar}
+        closeSidebar={closeSidebar} 
+      />
       
       <div className="main-content">
-        <TestModeBanner />
-        <Navbar toggleSidebar={toggleSidebar} />
+        <Navbar toggleSidebar={toggleSidebar} isCollapsed={isCollapsed} />
         <main className="page-container fade-in">
           <Outlet />
         </main>

@@ -5,7 +5,7 @@ import {
   BarChart2, ChevronDown, Factory, Hexagon, ShoppingCart, Tags,
   Sliders, RotateCcw, ClipboardList, Layers, FlaskConical,
   ArrowDownToLine, BookText, CreditCard, Phone, ShoppingBag,
-  UserCheck, AlertCircle, Zap, LogOut, Shield, Wallet
+  UserCheck, AlertCircle, Zap, LogOut, Shield, Wallet, Menu
 } from 'lucide-react';
 import useAuth from '../store/useAuth';
 
@@ -106,11 +106,12 @@ interface MenuItem {
 interface SidebarItemProps {
   item: MenuItem;
   isOpen: boolean;
+  isCollapsed: boolean;
   toggleOpen: () => void;
   closeSidebar: () => void;
 }
 
-function SidebarItem({ item, isOpen, toggleOpen, closeSidebar }: SidebarItemProps) {
+function SidebarItem({ item, isOpen, isCollapsed, toggleOpen, closeSidebar }: SidebarItemProps) {
   const Icon = item.icon;
   const hasSubmenus = item.submenus && item.submenus.length > 0;
 
@@ -122,12 +123,13 @@ function SidebarItem({ item, isOpen, toggleOpen, closeSidebar }: SidebarItemProp
           end={item.path === '/'}
           onClick={() => { if (window.innerWidth <= 768) closeSidebar(); }}
           className={({ isActive }) => `sidebar-link${isActive ? ' active' : ''}`}
+          title={isCollapsed ? item.title : ''}
         >
           <div className="sidebar-link-content">
-            <Icon size={18} />
-            <span>{item.title}</span>
+            {Icon && <Icon size={20} />}
+            {!isCollapsed && <span>{item.title}</span>}
           </div>
-          {item.badge && (
+          {!isCollapsed && item.badge && (
             <span style={{
               fontSize: '0.625rem', fontWeight: 800, letterSpacing: '0.02em',
               background: item.badge === 'HOT' ? 'var(--primary)' : 'var(--info)',
@@ -143,55 +145,77 @@ function SidebarItem({ item, isOpen, toggleOpen, closeSidebar }: SidebarItemProp
 
   return (
     <div className="sidebar-item">
-      <div className={`sidebar-link${isOpen ? ' active' : ''}`} onClick={toggleOpen}>
+      <div className={`sidebar-link${isOpen ? ' active' : ''}`} onClick={toggleOpen} title={isCollapsed ? item.title : ''}>
         <div className="sidebar-link-content">
-          <Icon size={18} />
-          <span>{item.title}</span>
+          <Icon size={20} />
+          {!isCollapsed && <span>{item.title}</span>}
         </div>
-        <ChevronDown size={14} className={`sidebar-chevron${isOpen ? ' open' : ''}`} style={{ opacity: 0.5 }} />
+        {!isCollapsed && <ChevronDown size={14} className={`sidebar-chevron${isOpen ? ' open' : ''}`} style={{ opacity: 0.5 }} />}
       </div>
-      <div className={`sidebar-submenu${isOpen ? ' open' : ''}`}>
-        {item.submenus?.map((sub, i) => (
-          <NavLink
-            key={i}
-            to={sub.path}
-            onClick={() => { if (window.innerWidth <= 768) closeSidebar(); }}
-            className={({ isActive }) => `submenu-link${isActive ? ' active' : ''}`}
-          >
-            {sub.title}
-          </NavLink>
-        ))}
-      </div>
+      {!isCollapsed && (
+        <div className={`sidebar-submenu${isOpen ? ' open' : ''}`}>
+          {item.submenus?.map((sub, i) => (
+            <NavLink
+              key={i}
+              to={sub.path}
+              onClick={() => { if (window.innerWidth <= 768) closeSidebar(); }}
+              className={({ isActive }) => `submenu-link${isActive ? ' active' : ''}`}
+            >
+              {sub.title}
+            </NavLink>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
 
-export default function Sidebar({ isOpen, closeSidebar }: { isOpen: boolean; closeSidebar: () => void }) {
+export default function Sidebar({ isOpen, isCollapsed, toggleCollapse, closeSidebar }: { 
+  isOpen: boolean; 
+  isCollapsed: boolean;
+  toggleCollapse: () => void;
+  closeSidebar: () => void;
+}) {
   const [openMenus, setOpenMenus] = useState<Record<string, boolean>>({});
   const toggle = (title: string) => setOpenMenus(prev => ({ ...prev, [title]: !prev[title] }));
-  const { logout, user } = useAuth();
+  const { logout } = useAuth();
 
   const currentMenu = React.useMemo(() => {
     return [...MENU];
   }, []);
 
   return (
-    <aside className={`sidebar${isOpen ? ' open' : ''}`}>
-      <div className="sidebar-header">
-        <a href="/" className="logo">
-          <Hexagon className="logo-icon" size={26} />
-          <span>Nexus</span>
-          <span className="logo-badge">ERP</span>
-        </a>
+    <aside className={`sidebar ${isOpen ? 'open' : ''} ${isCollapsed ? 'collapsed' : ''}`}>
+      <div className="sidebar-header" style={{ justifyContent: isCollapsed ? 'center' : 'space-between', padding: isCollapsed ? '0' : '0 1.25rem' }}>
+        {!isCollapsed && (
+          <a href="/" className="logo">
+            <Hexagon className="logo-icon" size={26} />
+            <span>Nexus</span>
+            <span className="logo-badge">ERP</span>
+          </a>
+        )}
+        <button 
+          type="button"
+          className="navbar-icon-btn toggle-btn" 
+          onClick={toggleCollapse}
+          style={{ 
+            color: 'var(--text-secondary)',
+            margin: isCollapsed ? '0 auto' : '0'
+          }}
+        >
+          <Menu size={20} />
+        </button>
       </div>
       <div className="sidebar-content">
         {currentMenu.map((section, si) => (
           <div key={si}>
-            <div className="sidebar-section-label">{section.section}</div>
+            {!isCollapsed && <div className="sidebar-section-label">{section.section}</div>}
+            {isCollapsed && si > 0 && <div style={{ height: '1px', background: 'var(--border-subtle)', margin: '1rem 0.5rem' }} />}
             {section.items.map((item, ii) => (
               <SidebarItem
                 key={ii}
                 item={item}
+                isCollapsed={isCollapsed}
                 isOpen={openMenus[item.title]}
                 toggleOpen={() => toggle(item.title)}
                 closeSidebar={closeSidebar}
@@ -200,13 +224,22 @@ export default function Sidebar({ isOpen, closeSidebar }: { isOpen: boolean; clo
           </div>
         ))}
       </div>
-      <div style={{ padding: '1rem', borderTop: '1px solid var(--border)' }}>
+      <div style={{ padding: '1rem', borderTop: '1px solid var(--border)', textAlign: 'center' }}>
         <button 
+          type="button"
           onClick={logout}
           className="btn btn-outline" 
-          style={{ width: '100%', display: 'flex', justifyContent: 'flex-start', color: 'var(--danger)', borderColor: 'transparent' }}
+          style={{ 
+            width: '100%', 
+            display: 'flex', 
+            justifyContent: isCollapsed ? 'center' : 'flex-start', 
+            color: 'var(--danger)', 
+            borderColor: 'transparent',
+            padding: isCollapsed ? '0.75rem 0' : '0.5625rem 1rem'
+          }}
+          title={isCollapsed ? 'Chiqish' : ''}
         >
-          <LogOut size={18} /> Chiqish
+          <LogOut size={18} /> {!isCollapsed && 'Chiqish'}
         </button>
       </div>
     </aside>

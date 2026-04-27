@@ -41,8 +41,9 @@ const POSCheckoutModal: React.FC<POSCheckoutModalProps> = (props) => {
   const debtNeedsCustomer = hasDebtAmount && !selectedCustomerId;
 
   const handleAmountChange = (key: string, val: string) => {
-    const num = val === '' ? 0 : parseFloat(val);
-    props.setAmounts({ ...amounts, [key]: isNaN(num) ? 0 : num });
+    const raw = val === '' ? '0' : val;
+    const num = parseFloat(raw);
+    props.setAmounts({ ...(amounts || {}), [key]: isNaN(num) ? 0 : num });
   };
 
   const paymentMethods = [
@@ -54,7 +55,7 @@ const POSCheckoutModal: React.FC<POSCheckoutModalProps> = (props) => {
   ];
 
   return (
-    <div className="modal-overlay" onClick={onClose} style={{ backdropFilter: 'blur(12px)', background: 'rgba(15, 23, 42, 0.7)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+    <div className="modal-overlay" onClick={onClose} style={{ background: 'rgba(15, 23, 42, 0.7)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
       <div className="modal-content fade-in" onClick={e => e.stopPropagation()} style={{ 
         maxWidth: '650px', width: '95%', borderRadius: 'var(--radius-xl)', overflow: 'hidden',
         boxShadow: 'var(--shadow-2xl)', background: 'var(--surface)', border: '1px solid var(--border)'
@@ -65,7 +66,7 @@ const POSCheckoutModal: React.FC<POSCheckoutModalProps> = (props) => {
             <h2 style={{ fontSize: '1.5rem', fontWeight: 900, letterSpacing: '-0.02em', color: 'var(--text)' }}>Sotuvni yakunlash</h2>
             <p style={{ fontSize: '0.8125rem', color: 'var(--text-muted)', marginTop: '0.125rem' }}>Barcha to'lov ma'lumotlarini tekshiring</p>
           </div>
-          <button onClick={onClose} className="btn-icon btn-ghost" style={{ background: 'var(--surface-2)', borderRadius: '50%', width: '40px', height: '40px' }}><X size={20}/></button>
+          <button type="button" onClick={onClose} className="btn-icon btn-ghost" style={{ background: 'var(--surface-2)', borderRadius: '50%', width: '40px', height: '40px' }}><X size={20}/></button>
         </div>
 
         {/* Body */}
@@ -99,7 +100,7 @@ const POSCheckoutModal: React.FC<POSCheckoutModalProps> = (props) => {
               <div>
                 <label className="form-label" style={{ fontWeight: 700 }}>Omborni tanlang</label>
                 <select className="input-field" value={selectedWarehouseId} onChange={e => setSelectedWarehouseId(e.target.value)} style={{ padding: '0.75rem', borderRadius: 'var(--radius)' }}>
-                  {warehouses.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}
+                  {(warehouses || []).map(w => <option key={w?.id} value={w?.id}>{w?.name || 'Noma\'lum ombor'}</option>)}
                 </select>
               </div>
               
@@ -121,7 +122,7 @@ const POSCheckoutModal: React.FC<POSCheckoutModalProps> = (props) => {
                   }}
                 >
                   <option value="">Chakana mijoz</option>
-                  {customers.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                  {(customers || []).map(c => <option key={c?.id} value={c?.id}>{c?.name || 'Noma\'lum mijoz'}</option>)}
                 </select>
                 {/* Qarz+Mijoz ogohlantirishi */}
                 {debtNeedsCustomer && (
@@ -144,10 +145,12 @@ const POSCheckoutModal: React.FC<POSCheckoutModalProps> = (props) => {
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
                 <div style={{ display: 'flex', gap: '0.5rem', background: 'var(--surface)', padding: '0.25rem', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border)' }}>
                    <button 
+                    type="button"
                     onClick={() => setDiscountType('percent')}
                     style={{ flex: 1, padding: '0.5rem', borderRadius: '6px', border: 'none', background: discountType === 'percent' ? 'var(--primary)' : 'transparent', color: discountType === 'percent' ? 'var(--primary-deep)' : 'var(--text-muted)', fontWeight: 700, cursor: 'pointer', transition: 'all 0.2s' }}
                    >% Foiz</button>
                    <button 
+                    type="button"
                     onClick={() => setDiscountType('amount')}
                     style={{ flex: 1, padding: '0.5rem', borderRadius: '6px', border: 'none', background: discountType === 'amount' ? 'var(--primary)' : 'transparent', color: discountType === 'amount' ? 'var(--primary-deep)' : 'var(--text-muted)', fontWeight: 700, cursor: 'pointer', transition: 'all 0.2s' }}
                    >Summa</button>
@@ -172,6 +175,7 @@ const POSCheckoutModal: React.FC<POSCheckoutModalProps> = (props) => {
                 const active = method === pm.id;
                 return (
                   <button
+                    type="button"
                     key={pm.id}
                     onClick={() => setMethod(pm.id)}
                     style={{
@@ -230,10 +234,11 @@ const POSCheckoutModal: React.FC<POSCheckoutModalProps> = (props) => {
 
         {/* Footer */}
         <div style={{ padding: '1.5rem 2rem', borderTop: '1px solid var(--border)', background: 'var(--surface-2)', display: 'flex', gap: '1rem' }}>
-          <button onClick={onClose} className="btn btn-outline" style={{ flex: 1, padding: '1.25rem', fontSize: '1rem', fontWeight: 800, borderRadius: 'var(--radius)' }}>
+          <button type="button" onClick={onClose} className="btn btn-outline" style={{ flex: 1, padding: '1.25rem', fontSize: '1rem', fontWeight: 800, borderRadius: 'var(--radius)' }}>
             Bekor qilish
           </button>
           <button 
+            type="button"
             onClick={() => { handleSell(); onClose(); }} 
             className="btn btn-primary" 
             disabled={debtNeedsCustomer}

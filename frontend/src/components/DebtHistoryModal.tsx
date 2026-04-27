@@ -15,7 +15,7 @@ export default function DebtHistoryModal({ debt, onClose }: Props) {
   return (
     <div className="modal-overlay" style={{
       display: 'flex', alignItems: 'center', justifyContent: 'center',
-      zIndex: 1000, backdropFilter: 'blur(8px)', background: 'rgba(15, 23, 42, 0.6)', padding: '1rem'
+      zIndex: 1000, background: 'rgba(15, 23, 42, 0.6)', padding: '1rem'
     }} onClick={onClose}>
       <div className="modal-content fade-in" onClick={e => e.stopPropagation()} style={{ maxWidth: 500, width: '100%' }}>
         <div className="modal-header">

@@ -14,9 +14,10 @@ const UNREAD_COUNT = 3;
 
 interface NavbarProps {
   toggleSidebar: () => void;
+  isCollapsed: boolean;
 }
 
-export default function Navbar({ toggleSidebar }: NavbarProps) {
+export default function Navbar({ toggleSidebar, isCollapsed }: NavbarProps) {
   const navigate = useNavigate();
   const { user, logout } = useAuth();
   const { theme } = useTheme();
@@ -105,11 +106,11 @@ export default function Navbar({ toggleSidebar }: NavbarProps) {
       <header className="navbar">
         {/* Left */}
         <div className="navbar-left">
-          <button className="navbar-icon-btn" onClick={toggleSidebar} title="Menyu">
+          <button className="navbar-icon-btn mobile-only" onClick={toggleSidebar} title="Menyu">
             <Menu size={20} />
           </button>
           
-          <div className="navbar-divider nav-desktop" />
+          <div className="navbar-divider mobile-only" />
 
           {/* Search */}
           <button

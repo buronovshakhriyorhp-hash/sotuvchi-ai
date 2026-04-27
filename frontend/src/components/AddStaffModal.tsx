@@ -10,6 +10,7 @@ interface AddStaffModalProps {
 }
 
 export default function AddStaffModal({ onClose, onSaved, editStaff }: AddStaffModalProps) {
+  const toast = useToast();
   const [formData, setFormData] = useState({
     name: '',
     phone: '+998',
@@ -45,7 +46,7 @@ export default function AddStaffModal({ onClose, onSaved, editStaff }: AddStaffM
       onSaved();
       onClose();
     } catch (err: any) {
-      alert(err.response?.data?.error || 'Xatolik yuz berdi');
+      toast.error(err.response?.data?.error || 'Xatolik yuz berdi');
     } finally {
       setLoading(false);
     }
@@ -53,12 +54,11 @@ export default function AddStaffModal({ onClose, onSaved, editStaff }: AddStaffM
 
   return (
     <div className="modal-backdrop" onClick={onClose} style={{ 
-      backdropFilter: 'blur(8px)', 
       background: 'rgba(15, 23, 42, 0.4)',
       display: 'flex', alignItems: 'center', justifyContent: 'center'
     }}>
       <div 
-        className="modal-content animate-in" 
+        className="modal-content" 
         onClick={e => e.stopPropagation()} 
         style={{ 
           maxWidth: '480px', 

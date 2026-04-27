@@ -17,14 +17,6 @@ interface ApiResponse<T> {
   error?: string;
 }
 
-interface ApiInstance extends Omit<AxiosInstance, 'get' | 'post' | 'put' | 'delete' | 'patch'> {
-  get<T = any>(url: string, config?: any): Promise<T>;
-  post<T = any>(url: string, data?: any, config?: any): Promise<T>;
-  put<T = any>(url: string, data?: any, config?: any): Promise<T>;
-  delete<T = any>(url: string, config?: any): Promise<T>;
-  patch<T = any>(url: string, data?: any, config?: any): Promise<T>;
-}
-
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL || '/api',
   timeout: 15000,

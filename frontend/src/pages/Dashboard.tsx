@@ -357,24 +357,30 @@ export default function Dashboard() {
             <Award size={18} className="text-muted" />
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', marginTop: '1.5rem' }}>
-            {(topProducts || []).map((p, i) => (
-              <div key={p.id}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem', fontSize: '0.875rem' }}>
-                  <span style={{ fontWeight: 600 }}>{p.name}</span>
-                  <span style={{ color: 'var(--text-muted)' }}>{p.totalQty} ta sotildi</span>
+            {(topProducts || []).map((p, i) => {
+              const maxRevenue = (topProducts && topProducts[0]?.totalRevenue) || 1;
+              const widthPerc = Math.min(100, Math.max(0, (p.totalRevenue / maxRevenue) * 100));
+              
+              return (
+                <div key={p.id}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem', fontSize: '0.875rem' }}>
+                    <span style={{ fontWeight: 600 }}>{p.name}</span>
+                    <span style={{ color: 'var(--text-muted)' }}>{p.totalQty} ta sotildi</span>
+                  </div>
+                  <div style={{ height: 8, background: 'var(--surface-2)', borderRadius: 4, overflow: 'hidden' }}>
+                    <div 
+                      style={{ 
+                        height: '100%', 
+                        width: `${widthPerc}%`, 
+                        background: i === 0 ? 'var(--primary)' : 'var(--primary-dark)',
+                        borderRadius: 4,
+                        transition: 'width 0.6s var(--ease)'
+                      }} 
+                    />
+                  </div>
                 </div>
-                <div style={{ height: 8, background: 'var(--surface-2)', borderRadius: 4, overflow: 'hidden' }}>
-                  <div 
-                    style={{ 
-                      height: '100%', 
-                      width: `${(p.totalRevenue / topProducts[0].totalRevenue) * 100}%`, 
-                      background: i === 0 ? 'var(--primary)' : 'var(--primary-dark)',
-                      borderRadius: 4
-                    }} 
-                  />
-                </div>
-              </div>
-            ))}
+              );
+            })}
             {topProducts.length === 0 && (
               <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-muted)' }}>Ma'lumot mavjud emas</div>
             )}

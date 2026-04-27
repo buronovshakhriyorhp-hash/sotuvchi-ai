@@ -78,10 +78,13 @@ export default function usePOS() {
     const savedWarehouse = localStorage.getItem('nexus_pos_warehouse');
 
     if (savedCart) {
-      try { setCart(JSON.parse(savedCart)); } catch(e) { console.error(e); }
+      try { 
+        const parsed = JSON.parse(savedCart);
+        if (Array.isArray(parsed)) setCart(parsed); 
+      } catch(e) { console.error('POS: Failed to parse cart from localStorage', e); }
     }
     if (savedCustomer) setSelectedCustomerId(savedCustomer);
-    if (savedDiscount) setDiscount(Number(savedDiscount));
+    if (savedDiscount) setDiscount(Number(savedDiscount) || 0);
     if (savedWarehouse) setSelectedWarehouseId(savedWarehouse);
   }, []);
 
@@ -115,11 +118,11 @@ export default function usePOS() {
         api.get<any>('/reports/top-products', { params: { limit: 20 } }).catch(() => null)
       ]);
       
-      const products = Array.isArray(prodRes) ? prodRes : (prodRes?.products || []);
-      const cats = Array.isArray(catRes) ? catRes : (catRes?.categories || []);
-      const custs = Array.isArray(custRes) ? custRes : (custRes?.customers || []);
-      const wares = Array.isArray(wareRes) ? wareRes : (wareRes?.warehouses || []);
-      const topProd = Array.isArray(topRes) ? topRes : [];
+      const products = Array.isArray(prodRes) ? prodRes : (prodRes?.products || prodRes?.data || []);
+      const cats = Array.isArray(catRes) ? catRes : (catRes?.categories || catRes?.data || []);
+      const custs = Array.isArray(custRes) ? custRes : (custRes?.customers || custRes?.data || []);
+      const wares = Array.isArray(wareRes) ? wareRes : (wareRes?.warehouses || wareRes?.data || []);
+      const topProd = Array.isArray(topRes) ? topRes : (topRes?.data || []);
       
       setCatalog(products);
       setCategories(cats);
@@ -133,11 +136,11 @@ export default function usePOS() {
     } catch (err) { 
       console.error('POS fetchData error:', err); 
       // If API fails, we already have cached data in state if it existed
-      if (catalog.length === 0) {
-        toast.warning("Internet yo'q, lokal ma'lumotlar yuklanmoqda...");
+      if (!catalog || catalog.length === 0) {
+        toast.warning("Internet yo'q yoki serverda xatolik. Lokal ma'lumotlar yuklanmoqda...");
       }
     }
-  }, [selectedWarehouseId, toast, catalog.length]);
+  }, [selectedWarehouseId, toast]);
 
   useEffect(() => {
     searchRef.current?.focus();

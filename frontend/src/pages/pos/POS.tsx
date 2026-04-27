@@ -162,7 +162,7 @@ export default function POS() {
         <div className="pos-title-area">
           <h1 style={{ fontSize: '1.5rem', fontWeight: 900, color: 'var(--text)', letterSpacing: '-0.02em' }}>Sotuv bo'limi</h1>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: '0.25rem' }}>
-            <span style={{ fontSize: '0.8125rem', color: 'var(--text-muted)' }}>Bazada {catalog.length} xil mahsulot</span>
+            <span style={{ fontSize: '0.8125rem', color: 'var(--text-muted)' }}>Bazada {catalog?.length || 0} xil mahsulot</span>
             <div style={{ width: 4, height: 4, borderRadius: '50%', background: 'var(--border-strong)' }}></div>
             <span style={{ fontSize: '0.8125rem', color: 'var(--success)', fontWeight: 700 }}>Online</span>
           </div>
@@ -171,25 +171,26 @@ export default function POS() {
         <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
           <div className="pos-total-display" style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
             <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase' }}>
-              Jami ({cart.reduce((s,i) => s + i.qty, 0)} dona):
+              Jami ({(cart || []).reduce((s,i) => s + (i.qty || 0), 0)} dona):
             </div>
             <div style={{ fontSize: '1.75rem', fontWeight: 900, color: 'var(--primary-deep)', lineHeight: 1 }}>
-              {format(total)}
+              {format(total || 0)}
             </div>
           </div>
           
           <button 
-            className={`btn btn-lg ${cart.length > 0 ? 'btn-primary' : 'btn-outline'}`} 
+            type="button"
+            className={`btn btn-lg ${(cart?.length || 0) > 0 ? 'btn-primary' : 'btn-outline'}`} 
             style={{ 
               height: '56px', 
               padding: '0 2rem', 
               borderRadius: 'var(--radius-lg)', 
               fontSize: '1rem', 
               fontWeight: 800,
-              boxShadow: cart.length > 0 ? '0 8px 16px -4px rgba(245, 158, 11, 0.4)' : 'none'
+              boxShadow: (cart?.length || 0) > 0 ? '0 8px 16px -4px rgba(245, 158, 11, 0.4)' : 'none'
             }}
             onClick={() => {
-              if (cart.length === 0) {
+              if (!cart || cart.length === 0) {
                 toast.warning("Sotuvni yakunlash uchun avval mahsulot tanlang!");
                 return;
               }
@@ -218,18 +219,19 @@ export default function POS() {
       </div>
 
       {/* Floating Cart Button (Mobile Only) */}
-      {cart.length > 0 && activeTab === 'products' && window.innerWidth < 1024 && (
-        <button className="floating-cart-btn" onClick={() => setActiveTab('cart')} style={{ background: 'var(--primary)', color: 'var(--primary-deep)' }}>
+      {(cart?.length || 0) > 0 && activeTab === 'products' && typeof window !== 'undefined' && window.innerWidth < 1024 && (
+        <button type="button" className="floating-cart-btn" onClick={() => setActiveTab('cart')} style={{ background: 'var(--primary)', color: 'var(--primary-deep)' }}>
           <ShoppingCart size={28} />
           <span className="pos-cart-badge" style={{ top: -5, right: -5 }}>
-            {cart.reduce((s, i) => s + i.qty, 0)}
+            {(cart || []).reduce((s, i) => s + (i.qty || 0), 0)}
           </span>
         </button>
       )}
 
       {/* Mobile Nav */}
-      <div className="pos-bottom-nav mobile-only" style={{ background: 'var(--surface)', backdropFilter: 'blur(20px)', borderTop: '1px solid var(--border)' }}>
+      <div className="pos-bottom-nav mobile-only" style={{ background: 'var(--surface)', borderTop: '1px solid var(--border)' }}>
         <button 
+          type="button"
           className={`pos-nav-item ${activeTab === 'products' ? 'active' : ''}`}
           onClick={() => setActiveTab('products')}
         >
@@ -237,14 +239,15 @@ export default function POS() {
           <span style={{ color: activeTab === 'products' ? 'var(--primary)' : 'var(--text-muted)' }}>Mahsulotlar</span>
         </button>
         <button 
+          type="button"
           className={`pos-nav-item ${activeTab === 'cart' ? 'active' : ''}`}
           onClick={() => setActiveTab('cart')}
         >
           <div style={{ position:'relative' }}>
             <ShoppingCart size={22} color={activeTab === 'cart' ? 'var(--primary)' : 'var(--text-muted)'} />
-            {cart.length > 0 && (
+            {(cart?.length || 0) > 0 && (
               <span className="pos-cart-badge" style={{ background: 'var(--primary)', color: 'var(--primary-deep)' }}>
-                {cart.reduce((s, i) => s + i.qty, 0)}
+                {(cart || []).reduce((s, i) => s + (i.qty || 0), 0)}
               </span>
             )}
           </div>
@@ -266,7 +269,7 @@ export default function POS() {
           <div className="modal-content modal-sm" onClick={e => e.stopPropagation()}>
             <div className="modal-header">
               <h2 className="modal-title">Yangi mijoz qo'shish</h2>
-              <button onClick={() => setShowAddCustomer(false)} className="btn btn-ghost btn-icon"><X size={20}/></button>
+              <button type="button" onClick={() => setShowAddCustomer(false)} className="btn btn-ghost btn-icon"><X size={20}/></button>
             </div>
             <div className="modal-body">
               <form id="add-customer-form" onSubmit={async (e) => {
@@ -301,7 +304,7 @@ export default function POS() {
               </form>
             </div>
             <div className="modal-footer">
-              <button onClick={() => setShowAddCustomer(false)} className="btn btn-outline">Bekor qilish</button>
+              <button type="button" onClick={() => setShowAddCustomer(false)} className="btn btn-outline">Bekor qilish</button>
               <button type="submit" form="add-customer-form" className="btn btn-primary">💾 Qo'shish</button>
             </div>
           </div>
@@ -323,26 +326,26 @@ export default function POS() {
             <div style={{ padding: '0 1.5rem 1.5rem' }}>
               <div style={{ background:'var(--surface-2)', borderRadius:'var(--radius)', padding:'1rem', marginBottom:'1.25rem', fontSize:'0.875rem' }}>
                 <div style={{ display:'flex', justifyContent:'space-between', marginBottom:'0.5rem', fontWeight:700 }}>
-                  <span>Jami summma:</span><span style={{ fontSize:'1.125rem' }}>{format(receiptData.total)}</span>
+                  <span>Jami summma:</span><span style={{ fontSize:'1.125rem' }}>{format(receiptData.total || 0)}</span>
                 </div>
                 <div style={{ borderTop:'1px dashed var(--border)', marginTop:'0.5rem', paddingTop:'0.5rem' }}>
-                  {receiptData.items.map((it: any, i: number) => (
+                  {(receiptData.items || []).map((it: any, i: number) => (
                     <div key={i} style={{ display:'flex', justifyContent:'space-between', fontSize:'0.8rem', padding:'0.15rem 0' }}>
                       <span style={{ whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis', maxWidth:'60%'}}>{it.name} × {it.qty}</span>
-                      <span>{format(it.price * it.qty)}</span>
+                      <span>{format((it.price || 0) * (it.qty || 0))}</span>
                     </div>
                   ))}
                 </div>
               </div>
 
               <div style={{ display:'flex', gap:'0.75rem', marginBottom:'1.25rem' }}>
-                <button onClick={() => setPrintType('pdf')} className={`btn ${printType === 'pdf' ? 'btn-primary' : 'btn-outline'}`} style={{ flex:1, fontSize:'0.8rem' }}>PDF</button>
-                <button onClick={() => setPrintType('thermal')} className={`btn ${printType === 'thermal' ? 'btn-primary' : 'btn-outline'}`} style={{ flex:1, fontSize:'0.8rem' }}>Termal</button>
+                <button type="button" onClick={() => setPrintType('pdf')} className={`btn ${printType === 'pdf' ? 'btn-primary' : 'btn-outline'}`} style={{ flex:1, fontSize:'0.8rem' }}>PDF</button>
+                <button type="button" onClick={() => setPrintType('thermal')} className={`btn ${printType === 'thermal' ? 'btn-primary' : 'btn-outline'}`} style={{ flex:1, fontSize:'0.8rem' }}>Termal</button>
               </div>
 
               <div style={{ display:'flex', gap:'0.75rem' }}>
-                <button onClick={() => setSuccess(false)} className="btn btn-outline" style={{ flex:1 }}>Yopish</button>
-                <button onClick={() => {
+                <button type="button" onClick={() => setSuccess(false)} className="btn btn-outline" style={{ flex:1 }}>Yopish</button>
+                <button type="button" onClick={() => {
                   if (printType === 'thermal') toast.info("Termal printerga yuborilmoqda...");
                   else window.print();
                 }} className="btn btn-primary" style={{ flex:1 }}><Printer size={16}/> Çhiqarish</button>

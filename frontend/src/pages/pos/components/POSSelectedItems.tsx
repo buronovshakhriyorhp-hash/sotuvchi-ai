@@ -52,7 +52,7 @@ const POSSelectedItems: React.FC<POSSelectedItemsProps> = ({
     setEditPriceValue('');
   };
 
-  const zeroQtyCount = cart.filter(i => i.qty === 0).length;
+  const zeroQtyCount = (cart || []).filter(i => (i.qty || 0) === 0).length;
 
   return (
     <div
@@ -85,7 +85,7 @@ const POSSelectedItems: React.FC<POSSelectedItemsProps> = ({
 
       {/* Items */}
       <div style={{ flex: 1, overflowY: 'auto', padding: '1rem' }}>
-        {cart.length === 0 ? (
+        {(!cart || cart.length === 0) ? (
           <div style={{ padding: '3rem 1rem', textAlign: 'center', color: 'var(--text-muted)' }}>
             Hozircha mahsulot tanlanmagan
           </div>
@@ -289,13 +289,13 @@ const POSSelectedItems: React.FC<POSSelectedItemsProps> = ({
         <div>
           <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '2px' }}>Jami mahsulot:</div>
           <div style={{ fontWeight: 800, fontSize: '1rem' }}>
-            {cart.reduce((s, i) => parseFloat((s + i.qty).toFixed(4)), 0)} dona
+            {(cart || []).reduce((s, i) => parseFloat((s + (i.qty || 0)).toFixed(4)), 0)} dona
           </div>
         </div>
         <div style={{ textAlign: 'right' }}>
           <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '2px' }}>Jami summa:</div>
           <div style={{ fontWeight: 800, fontSize: '1.25rem', color: 'var(--primary)' }}>
-            {format(cart.reduce((s, i) => s + (i.sellPrice * i.qty), 0))}
+            {format((cart || []).reduce((s, i) => s + ((i.sellPrice || 0) * (i.qty || 0)), 0))}
           </div>
         </div>
       </div>

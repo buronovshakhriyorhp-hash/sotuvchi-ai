@@ -74,7 +74,7 @@ const POSProductGrid = ({
 
       {/* Product Grid */}
       <div style={{ flex: 1, overflowY: 'auto', padding: '0.25rem' }}>
-        {displayedProducts.length === 0 ? (
+        {(displayedProducts || []).length === 0 ? (
           <div style={{ padding: '8rem 2rem', textAlign: 'center' }}>
             <div style={{ padding: '2rem', background: 'var(--surface-2)', borderRadius: '50%', width: 'fit-content', margin: '0 auto 2rem' }}>
               <Search size={48} style={{ opacity: 0.2, color: 'var(--text-muted)' }} />
@@ -88,13 +88,13 @@ const POSProductGrid = ({
             gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', 
             gap: '1rem' 
           }}>
-            {displayedProducts.map(p => {
-              const outOfStock = p.stock <= 0;
-              const lowStock = p.stock < (p.minStock || 5);
+            {(displayedProducts || []).map(p => {
+              const outOfStock = (p?.stock || 0) <= 0;
+              const lowStock = (p?.stock || 0) < (p?.minStock || 5);
               
               return (
                 <div 
-                  key={p.id} 
+                  key={p?.id} 
                   className="card product-tile" 
                   onClick={() => !outOfStock && addToCart(p)}
                   style={{ 
@@ -123,7 +123,7 @@ const POSProductGrid = ({
                        background: outOfStock ? 'var(--danger-bg)' : lowStock ? 'var(--warning-bg)' : 'var(--success-bg)',
                        color: outOfStock ? 'var(--danger)' : lowStock ? 'var(--warning-strong)' : 'var(--success)'
                      }}>
-                       {outOfStock ? 'Tugagan' : `${p.stock} ${p.unit}`}
+                       {outOfStock ? 'Tugagan' : `${p?.stock || 0} ${p?.unit || ''}`}
                      </span>
                   </div>
 
@@ -135,13 +135,13 @@ const POSProductGrid = ({
                       lineHeight: 1.2,
                       minHeight: '2.4em',
                       display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' 
-                    }}>{p.name}</div>
-                    <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)', marginTop: '0.25rem', fontFamily: 'monospace' }}>#{p.sku}</div>
+                    }}>{p?.name}</div>
+                    <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)', marginTop: '0.25rem', fontFamily: 'monospace' }}>#{p?.sku}</div>
                   </div>
                   
                   <div style={{ marginTop: 'auto', display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
                     <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', fontWeight: 600 }}>NARXI</div>
-                    <div style={{ fontWeight: 900, color: 'var(--primary-deep)', fontSize: '1.25rem' }}>{format(p.sellPrice)}</div>
+                    <div style={{ fontWeight: 900, color: 'var(--primary-deep)', fontSize: '1.25rem' }}>{format(p?.sellPrice || 0)}</div>
                   </div>
 
                   <div className="product-tile-overlay" style={{ 

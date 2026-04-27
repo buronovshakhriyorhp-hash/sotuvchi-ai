@@ -23,7 +23,7 @@ const CustomerList = React.lazy(() => import('@/pages/customers/CustomerList'));
 const CustomerPayments = React.lazy(() => import('@/pages/customers/CustomerPayments'));
 const SupplierList = React.lazy(() => import('@/pages/suppliers/SupplierList'));
 const SupplierDebts = React.lazy(() => import('@/pages/suppliers/SupplierDebts'));
-const BlankPage = React.lazy(() => import('@/pages/BlankPage'));
+const NotFound = React.lazy(() => import('@/pages/NotFound'));
 const Expenses = React.lazy(() => import('@/pages/expenses/Expenses'));
 const AuditLogs = React.lazy(() => import('@/pages/audit/AuditLogs'));
 const POS = React.lazy(() => import('@/pages/pos/POS'));
@@ -115,7 +115,7 @@ function App() {
                   <Route path="audit" element={<RoleGate allowedRoles={['ADMIN']}><AuditLogs /></RoleGate>} />
                   <Route path="settings" element={<RoleGate allowedRoles={['ADMIN', 'MANAGER']}><Settings /></RoleGate>} />
                   <Route path="settings/warehouses" element={<RoleGate allowedRoles={['ADMIN', 'MANAGER']}><WarehouseManager /></RoleGate>} />
-                  <Route path="*" element={<BlankPage />} />
+                  <Route path="*" element={<NotFound />} />
                 </Route>
               )}
             </Routes>

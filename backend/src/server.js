@@ -12,6 +12,15 @@ if (missingEnv.length > 0) {
   process.exit(1);
 }
 
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('Unhandled Rejection at:', promise, 'reason:', reason);
+});
+
+process.on('uncaughtException', (err) => {
+  console.error('Uncaught Exception thrown:', err);
+  process.exit(1);
+});
+
 const start = async () => {
   const app = buildApp();
   
@@ -55,7 +64,11 @@ const start = async () => {
     const cacheStatus = cache.connected ? '✅ ACTIVE (Redis)' : '⚡ HYBRID (Memory-only)';
     console.log(`💾 Cache: ${cacheStatus}\n`);
   } catch (err) {
-    app.log.error(err);
+    console.error('\n❌ Nexus ERP Startup failed!');
+    console.error('Xatolik tafsilotlari:', err);
+    if (app && app.log) {
+      app.log.error(err);
+    }
     process.exit(1);
   }
 };

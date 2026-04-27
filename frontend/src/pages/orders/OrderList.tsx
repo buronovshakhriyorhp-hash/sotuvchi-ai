@@ -32,6 +32,7 @@ export default function OrderList() {
 
   const [view, setView] = useState('table');
   const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState('');
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -54,8 +55,9 @@ export default function OrderList() {
   };
 
   const filtered = orders.filter(o =>
-    (o.customerName || '').toLowerCase().includes(search.toLowerCase()) ||
-    (o.orderNo || '').toLowerCase().includes(search.toLowerCase())
+    (statusFilter ? o.status === statusFilter : true) &&
+    ((o.customerName || '').toLowerCase().includes(search.toLowerCase()) ||
+    (o.orderNo || '').toLowerCase().includes(search.toLowerCase()))
   );
 
   const moveStatus = async (id: number | string, newStatus: OrderStatus) => {
@@ -99,7 +101,7 @@ export default function OrderList() {
           const Icon = val.icon;
           const count = orders.filter(o=>o.status===key).length;
           return (
-            <div key={key} className="card" style={{ padding:'1rem 1.25rem', cursor:'pointer' }} onClick={()=>{}}>
+            <div key={key} className={`card ${statusFilter === key ? 'active' : ''}`} style={{ padding:'1rem 1.25rem', cursor:'pointer', border: statusFilter === key ? `2px solid var(--primary)` : 'none' }} onClick={()=>setStatusFilter(statusFilter === key ? '' : key)}>
               <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
                 <div>
                   <div className="stat-label">{val.label}</div>

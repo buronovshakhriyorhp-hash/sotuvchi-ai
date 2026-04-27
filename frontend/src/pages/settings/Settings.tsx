@@ -243,7 +243,7 @@ export default function Settings() {
         {/* Content */}
         <div className="card" style={{ minHeight: '400px', position: 'relative' }}>
           {loading && (
-            <div style={{ position:'absolute', inset:0, background:'rgba(255,255,255,0.7)', zIndex:10, display:'flex', alignItems:'center', justifyContent:'center', borderRadius:'inherit', backdropFilter: 'blur(2px)' }}>
+            <div style={{ position:'absolute', inset:0, background:'rgba(255,255,255,0.7)', zIndex:10, display:'flex', alignItems:'center', justifyContent:'center', borderRadius:'inherit' }}>
               <RefreshCw size={32} className="spin" style={{ color:'var(--primary)' }}/>
             </div>
           )}

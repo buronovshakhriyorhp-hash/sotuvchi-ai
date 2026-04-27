@@ -1,14 +1,44 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
-  X, Settings, Plus, Trash2, CreditCard, Download, Search
+  X, Plus, Trash2, CreditCard, Save, ShoppingCart, User as UserIcon, Building2, Calendar, StickyNote, PackageSearch
 } from 'lucide-react';
 import api from '../api/axios';
 import AddProductModal from './AddProductModal';
 import PaymentModal from './PaymentModal';
 import useCurrency from '../store/useCurrency';
 import useToast from '../store/useToast';
-import SearchableSelect from './SearchableSelect';
-import { Product, Customer, User, Sale } from '../types';
+import { Product, Customer, User } from '../types';
+
+// Custom SearchableSelect component since we removed the import
+function SearchableSelect({ options, value, onChange, placeholder, labelKey, valueKey, renderOption }: any) {
+  return (
+    <select
+      value={value}
+      onChange={e => onChange(e.target.value)}
+      style={{
+        width: '100%',
+        padding: '10px 14px',
+        border: '1px solid #d1d5db',
+        borderRadius: '6px',
+        fontSize: '14px',
+        outline: 'none',
+        cursor: 'pointer',
+        appearance: 'none',
+        backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23666' d='M6 9L1 4h10z'/%3E%3C/svg%3E")`,
+        backgroundRepeat: 'no-repeat',
+        backgroundPosition: 'right 12px center',
+        paddingRight: '36px'
+      }}
+    >
+      <option value="">{placeholder}</option>
+      {options.map((opt: any) => (
+        <option key={opt[valueKey]} value={opt[valueKey]}>
+          {opt[labelKey]}
+        </option>
+      ))}
+    </select>
+  );
+}
 
 interface SaleItemDraft {
   productId: number;
@@ -47,9 +77,14 @@ export default function NewSaleModal({ onClose, onSaved }: NewSaleModalProps) {
 
   const [showAddProduct, setShowAddProduct] = useState(false);
   const [showPayment, setShowPayment] = useState(false);
+  const [activeTab, setActiveTab] = useState<'mijoz' | 'mahsulot'>('mijoz');
 
   const qtyRef = useRef<HTMLInputElement>(null);
-  const searchRef = useRef<HTMLInputElement>(null);
+
+  const tabs = [
+    { id: 'mijoz' as const, label: "Mijoz ma'lumotlari" },
+    { id: 'mahsulot' as const, label: 'Mahsulotlar' },
+  ];
 
   const fetchAll = async () => {
     try {
@@ -169,211 +204,519 @@ export default function NewSaleModal({ onClose, onSaved }: NewSaleModalProps) {
     if (print) window.print();
   };
 
-  const selectedCustomer = customers.find(c => String(c.id) === customerId);
-
   return (
     <>
-      {/* Same modal pattern as AddProductModal */}
-      <div className="modal-overlay" onClick={onClose}>
-        <div className="modal-content" onClick={e => e.stopPropagation()} style={{ maxWidth: 1100, maxHeight: '92vh' }}>
-          
-          {/* ===== HEADER ===== */}
-          <div className="modal-header">
-            <div>
-              <h2 style={{ fontSize: '1.125rem', fontWeight: 800, margin: 0 }}>Yangi sotuv</h2>
-              <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '0.2rem' }}>
-                Mijoz: <b style={{ color: 'var(--text)' }}>{selectedCustomer?.name || "Noma'lum"}</b>
-                {selectedCustomer && <> · Qarz: <b>0</b> · Bonus: <b style={{ color: '#eab308' }}>0</b></>}
-              </div>
-            </div>
-            <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-              <div style={{ width: 160 }}>
-                <SearchableSelect
-                  options={warehouses}
-                  value={warehouseId}
-                  onChange={setWarehouseId}
-                  placeholder="Ombor"
-                  labelKey="name"
-                  valueKey="id"
-                  className="navbar-select-searchable"
-                />
-              </div>
-              <span className="badge badge-warning" style={{ borderRadius: '99px', padding: '0.3rem 0.8rem' }}>Tasdiqlanmagan</span>
-              <button className="btn btn-ghost btn-icon" onClick={onClose}><X size={20}/></button>
-            </div>
+      {/* Fullscreen New Sale Modal */}
+      <div style={{
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        width: '100%',
+        height: '100vh',
+        background: 'white',
+        zIndex: 1000,
+        display: 'flex',
+        flexDirection: 'column',
+        fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif'
+      }}>
+        {/* Header */}
+        <div style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          padding: '20px 40px',
+          borderBottom: '1px solid #e5e5e5',
+          background: 'white',
+          position: 'sticky',
+          top: 0,
+          zIndex: 10
+        }}>
+          <h1 style={{ fontSize: '24px', fontWeight: 600, color: '#333', margin: 0 }}>Yangi sotuv</h1>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
+            {activeTab === 'mahsulot' && items.length > 0 && (
+              <>
+                <button
+                  onClick={() => handleSave(false)}
+                  style={{
+                    padding: '10px 24px',
+                    border: 'none',
+                    borderRadius: '8px',
+                    fontSize: '15px',
+                    fontWeight: 500,
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    background: '#9333ea',
+                    color: 'white'
+                  }}
+                >
+                  <Save size={16} />
+                  Saqlash
+                </button>
+                <button
+                  onClick={handleOpenPayment}
+                  style={{
+                    padding: '10px 24px',
+                    border: 'none',
+                    borderRadius: '8px',
+                    fontSize: '15px',
+                    fontWeight: 500,
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    background: '#10b981',
+                    color: 'white'
+                  }}
+                >
+                  <CreditCard size={16} />
+                  To'lov
+                </button>
+              </>
+            )}
+            <button
+              onClick={() => {
+                if (confirm("Haqiqatan ham yopmoqchimisiz? Saqlanmagan o'zgarishlar yo'qoladi.")) {
+                  onClose();
+                }
+              }}
+              style={{
+                background: 'transparent',
+                border: 'none',
+                fontSize: '24px',
+                cursor: 'pointer',
+                color: '#666',
+                padding: '5px',
+                width: '32px',
+                height: '32px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                borderRadius: '4px'
+              }}
+            >
+              <X size={24} />
+            </button>
+          </div>
+        </div>
+
+        {/* Content */}
+        <div style={{ flex: 1, overflowY: 'auto', padding: '30px 40px', background: '#fafafa' }}>
+          {/* Tabs */}
+          <div style={{
+            display: 'flex',
+            gap: '8px',
+            marginBottom: '30px',
+            background: 'white',
+            padding: '8px',
+            borderRadius: '10px',
+            boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+            width: 'fit-content'
+          }}>
+            {tabs.map((tab) => (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                style={{
+                  padding: '12px 24px',
+                  background: activeTab === tab.id ? '#9333ea' : 'transparent',
+                  border: 'none',
+                  borderRadius: '6px',
+                  cursor: 'pointer',
+                  fontSize: '15px',
+                  fontWeight: 500,
+                  color: activeTab === tab.id ? 'white' : '#666',
+                  transition: 'all 0.2s'
+                }}
+              >
+                {tab.label}
+              </button>
+            ))}
           </div>
 
-          {/* ===== BODY ===== */}
-          <div className="modal-body" style={{ padding: 0 }}>
-            <div className="grid-2-cols">
-              
-              {/* ====== LEFT COLUMN ====== */}
-              <div style={{ padding: '1.5rem', borderRight: '1px solid var(--border)', display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-                
-                {/* Asosiy ma'lumotlar */}
-                <div>
-                  <div style={{ fontWeight: 700, color: 'var(--primary-dark)', marginBottom: '0.75rem', fontSize: '0.875rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Asosiy ma'lumotlar</div>
-                  <div className="form-group" style={{ marginBottom: '0.75rem' }}>
-                    <label className="form-label">Sana</label>
-                    <input type="date" className="input-field" value={saleDate} onChange={e=>setSaleDate(e.target.value)} />
-                  </div>
-                  <div className="form-group" style={{ marginBottom: '0.75rem' }}>
-                    <label className="form-label">Mijoz</label>
-                    <SearchableSelect
-                      options={customers}
-                      value={customerId}
-                      onChange={setCustomerId}
-                      placeholder="Mijoz tanlang"
-                      labelKey="name"
-                      valueKey="id"
-                      renderOption={(c) => (
-                        <div style={{ display:'flex', flexDirection:'column' }}>
-                          <span style={{ fontWeight: 600 }}>{c.name}</span>
-                          <span style={{ fontSize: '0.75rem', opacity: 0.8 }}>{c.phone || 'Tel ko\'rsatilmagan'}</span>
-                        </div>
-                      )}
-                    />
-                  </div>
-                  <div className="form-group" style={{ marginBottom: '0.75rem' }}>
-                    <label className="form-label">Mas'ul xodim</label>
-                    <SearchableSelect
-                      options={staff}
-                      value={staffId}
-                      onChange={setStaffId}
-                      placeholder="Mas'ul xodimni tanlang"
-                      labelKey="name"
-                      valueKey="id"
-                    />
-                  </div>
-                  <div className="form-group" style={{ marginBottom: 0 }}>
-                    <label className="form-label">Umumiy qiymati</label>
-                    <input type="text" className="input-field" readOnly value={format(subtotal)} style={{ background: 'var(--surface-2)', fontWeight: 800, fontSize: '1.1rem', color: 'var(--primary-dark)' }} />
-                  </div>
+          {/* Tab 1: Mijoz ma'lumotlari */}
+          {activeTab === 'mijoz' && (
+            <div style={{
+              background: 'white',
+              padding: '30px',
+              borderRadius: '12px',
+              boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+              maxWidth: '800px'
+            }}>
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(2, 1fr)',
+                gap: '24px 20px'
+              }}>
+                {/* Ombor */}
+                <div style={{ gridColumn: 'span 2', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  <label style={{ fontSize: '14px', fontWeight: 500, color: '#333', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <Building2 size={16} color="#9333ea" />
+                    Ombor <span style={{ color: '#ef4444' }}>*</span>
+                  </label>
+                  <select
+                    value={warehouseId}
+                    onChange={e => setWarehouseId(e.target.value)}
+                    style={{
+                      padding: '10px 14px',
+                      border: '1px solid #d1d5db',
+                      borderRadius: '6px',
+                      fontSize: '14px',
+                      outline: 'none',
+                      cursor: 'pointer',
+                      appearance: 'none',
+                      backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23666' d='M6 9L1 4h10z'/%3E%3C/svg%3E")`,
+                      backgroundRepeat: 'no-repeat',
+                      backgroundPosition: 'right 12px center',
+                      paddingRight: '36px'
+                    }}
+                  >
+                    {warehouses.length === 0 && <option value="">Omborlar yo'q</option>}
+                    {warehouses.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}
+                  </select>
+                </div>
+
+                {/* Mijoz */}
+                <div style={{ gridColumn: 'span 2', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  <label style={{ fontSize: '14px', fontWeight: 500, color: '#333', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <UserIcon size={16} color="#9333ea" />
+                    Mijoz
+                  </label>
+                  <select
+                    value={customerId}
+                    onChange={e => setCustomerId(e.target.value)}
+                    style={{
+                      padding: '10px 14px',
+                      border: '1px solid #d1d5db',
+                      borderRadius: '6px',
+                      fontSize: '14px',
+                      outline: 'none',
+                      cursor: 'pointer',
+                      appearance: 'none',
+                      backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23666' d='M6 9L1 4h10z'/%3E%3C/svg%3E")`,
+                      backgroundRepeat: 'no-repeat',
+                      backgroundPosition: 'right 12px center',
+                      paddingRight: '36px'
+                    }}
+                  >
+                    <option value="">Mijoz tanlang (ixtiyoriy)</option>
+                    {customers.map(c => <option key={c.id} value={c.id}>{c.name} {c.phone ? `- ${c.phone}` : ''}</option>)}
+                  </select>
+                </div>
+
+                {/* Sana */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  <label style={{ fontSize: '14px', fontWeight: 500, color: '#333', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <Calendar size={16} color="#9333ea" />
+                    Sana
+                  </label>
+                  <input
+                    type="date"
+                    value={saleDate}
+                    onChange={e => setSaleDate(e.target.value)}
+                    style={{
+                      padding: '10px 14px',
+                      border: '1px solid #d1d5db',
+                      borderRadius: '6px',
+                      fontSize: '14px',
+                      outline: 'none'
+                    }}
+                  />
+                </div>
+
+                {/* Mas'ul xodim */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  <label style={{ fontSize: '14px', fontWeight: 500, color: '#333', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <UserIcon size={16} color="#9333ea" />
+                    Mas'ul xodim
+                  </label>
+                  <select
+                    value={staffId}
+                    onChange={e => setStaffId(e.target.value)}
+                    style={{
+                      padding: '10px 14px',
+                      border: '1px solid #d1d5db',
+                      borderRadius: '6px',
+                      fontSize: '14px',
+                      outline: 'none',
+                      cursor: 'pointer',
+                      appearance: 'none',
+                      backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23666' d='M6 9L1 4h10z'/%3E%3C/svg%3E")`,
+                      backgroundRepeat: 'no-repeat',
+                      backgroundPosition: 'right 12px center',
+                      paddingRight: '36px'
+                    }}
+                  >
+                    <option value="">Xodim tanlang</option>
+                    {staff.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                  </select>
                 </div>
 
                 {/* Izoh */}
-                <div>
-                  <div style={{ fontWeight: 700, color: 'var(--primary-dark)', marginBottom: '0.75rem', fontSize: '0.875rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Izoh</div>
-                  <textarea className="input-field" rows={3} placeholder="Bu yerga qo'shimcha ma'lumot kiritishingiz mumkin" value={note} onChange={e=>setNote(e.target.value)} />
-                </div>
-              </div>
-
-              {/* ====== RIGHT COLUMN ====== */}
-              <div style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-                
-                {/* Mahsulot qo'shish */}
-                <div>
-                  <div style={{ fontWeight: 700, color: 'var(--primary-dark)', marginBottom: '0.75rem', fontSize: '0.875rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Mahsulot qo'shish</div>
-                  <div className="form-group" style={{ marginBottom: '0.75rem', position: 'relative' }}>
-                    <label className="form-label">Mahsulot nomi</label>
-                    <div style={{ display: 'flex', gap: '0.5rem' }}>
-                      <div style={{ flex: 1 }}>
-                        <SearchableSelect
-                          options={suggestions}
-                          value={selectedProduct?.id}
-                          onChange={(id) => {
-                            const p = suggestions.find(s => s.id === id);
-                            if (p) selectProduct(p);
-                          }}
-                          placeholder="Mahsulot nomini kiriting yoki izlang..."
-                          labelKey="name"
-                          valueKey="id"
-                          renderOption={(p: Product) => (
-                            <div style={{ display:'flex', justifyContent:'space-between', width:'100%' }}>
-                              <span style={{ fontWeight: 500 }}>{p.name}</span>
-                              <span style={{ fontWeight: 700, color: 'var(--primary-dark)' }}>{format(p.price || p.sellPrice || 0)}</span>
-                            </div>
-                          )}
-                        />
-                      </div>
-                      <button className="btn btn-outline btn-icon btn-sm" title="Yangi mahsulot" onClick={() => setShowAddProduct(true)}><Plus size={16}/></button>
-                    </div>
-                  </div>
-                  <div className="form-group" style={{ marginBottom: 0 }}>
-                    <label className="form-label">Soni</label>
-                    <div style={{ display: 'flex', gap: '0.5rem' }}>
-                      <input 
-                        ref={qtyRef}
-                        type="number" 
-                        className="input-field" 
-                        placeholder="Sonini kiriting" 
-                        value={selectedQty}
-                        onChange={e=>setSelectedQty(e.target.value)}
-                        onKeyDown={e => e.key === 'Enter' && addItem()}
-                        style={{ flex: 1 }}
-                      />
-                      <button onClick={addItem} className="btn btn-primary btn-sm" style={{ whiteSpace: 'nowrap' }}>
-                        <Plus size={14}/> Qo'shish
-                      </button>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Mahsulotlar jadvali */}
-                <div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
-                    <div style={{ fontWeight: 700, color: 'var(--primary-dark)', fontSize: '0.875rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Savatdagi mahsulotlar</div>
-                    <span style={{ fontSize: '0.8125rem', color: 'var(--text-muted)' }}>{items.length} ta</span>
-                  </div>
-                  <div style={{ border: '1px solid var(--border)', borderRadius: 'var(--radius)', overflow: 'hidden', maxHeight: 280, overflowY: 'auto' }}>
-                    <table className="table" style={{ minWidth: 'auto', fontSize: '0.8125rem' }}>
-                      <thead>
-                        <tr>
-                          <th>#</th>
-                          <th>Nomi</th>
-                          <th style={{ textAlign: 'center' }}>Soni</th>
-                          <th style={{ textAlign: 'right' }}>Narx</th>
-                          <th style={{ textAlign: 'right' }}>Jami</th>
-                          <th></th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {items.length === 0 ? (
-                          <tr><td colSpan={6} style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)' }}>Mahsulot qo'shing</td></tr>
-                        ) : items.map((item, idx) => (
-                          <tr key={item.productId}>
-                            <td style={{ color: 'var(--text-muted)' }}>{idx + 1}</td>
-                            <td style={{ fontWeight: 600 }}>{item.name}</td>
-                            <td style={{ textAlign: 'center' }}>
-                              <input 
-                                type="number" 
-                                value={item.qty} 
-                                onChange={e => updateItemQty(item.productId, e.target.value)}
-                                style={{ width: 60, textAlign: 'center', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', padding: '0.2rem 0.4rem', background: 'var(--surface)', color: 'var(--text)', fontWeight: 600, fontSize: '0.8125rem' }}
-                              />
-                            </td>
-                            <td style={{ textAlign: 'right', fontSize: '0.75rem' }}>{format(item.price)}</td>
-                            <td style={{ textAlign: 'right', fontWeight: 700, color: 'var(--primary-dark)' }}>{format(item.total)}</td>
-                            <td style={{ textAlign: 'center' }}>
-                              <button onClick={() => removeItem(item.productId)} className="btn btn-ghost btn-icon btn-sm" style={{ color: 'var(--danger)' }}><Trash2 size={14} /></button>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                  {/* Jami */}
-                  <div style={{ display: 'flex', justifyContent: 'flex-end', padding: '0.75rem 0', borderTop: '2px solid var(--border)', marginTop: '0.5rem' }}>
-                    <span style={{ fontSize: '1.1rem', fontWeight: 800, color: 'var(--text)' }}>Jami: {format(subtotal)}</span>
-                  </div>
+                <div style={{ gridColumn: 'span 2', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  <label style={{ fontSize: '14px', fontWeight: 500, color: '#333', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <StickyNote size={16} color="#9333ea" />
+                    Izoh
+                  </label>
+                  <textarea
+                    rows={3}
+                    placeholder="Qo'shimcha ma'lumot..."
+                    value={note}
+                    onChange={e => setNote(e.target.value)}
+                    style={{
+                      padding: '10px 14px',
+                      border: '1px solid #d1d5db',
+                      borderRadius: '6px',
+                      fontSize: '14px',
+                      outline: 'none',
+                      resize: 'vertical',
+                      fontFamily: 'inherit'
+                    }}
+                  />
                 </div>
               </div>
             </div>
-          </div>
+          )}
 
-          {/* ===== FOOTER ===== */}
-          <div className="modal-footer">
-            <button onClick={onClose} className="btn btn-outline">Bekor qilish</button>
-            <button onClick={() => handleSave(false)} className="btn btn-primary" style={{ display: 'flex', gap: '0.4rem' }}>
-              💾 Saqlash
-            </button>
-            <button onClick={() => handleSave(true)} className="btn btn-primary" style={{ display: 'flex', gap: '0.4rem' }}>
-              🖨 Saqlash va chek
-            </button>
-            <button onClick={handleOpenPayment} className="btn btn-success" style={{ display: 'flex', gap: '0.4rem' }}>
-              <CreditCard size={15}/> Mijoz to'lovi
-            </button>
-          </div>
+          {/* Tab 2: Mahsulotlar */}
+          {activeTab === 'mahsulot' && (
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 400px', gap: '24px' }}>
+              {/* Left: Product Search and Add */}
+              <div style={{
+                background: 'white',
+                padding: '30px',
+                borderRadius: '12px',
+                boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
+              }}>
+                <div style={{
+                  fontSize: '16px',
+                  fontWeight: 600,
+                  color: '#9333ea',
+                  marginBottom: '20px',
+                  paddingBottom: '10px',
+                  borderBottom: '2px solid #9333ea',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px'
+                }}>
+                  <PackageSearch size={18} />
+                  Mahsulot qo'shish
+                </div>
+
+                {/* Product Search */}
+                <div style={{ marginBottom: '16px' }}>
+                  <label style={{ fontSize: '14px', fontWeight: 500, color: '#333', marginBottom: '8px', display: 'block' }}>
+                    Mahsulot qidirish
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="Mahsulot nomini kiriting..."
+                    value={productSearch}
+                    onChange={e => setProductSearch(e.target.value)}
+                    style={{
+                      width: '100%',
+                      padding: '10px 14px',
+                      border: '1px solid #d1d5db',
+                      borderRadius: '6px',
+                      fontSize: '14px',
+                      outline: 'none'
+                    }}
+                  />
+                  {/* Suggestions */}
+                  {suggestions.length > 0 && (
+                    <div style={{
+                      border: '1px solid #e5e5e5',
+                      borderRadius: '6px',
+                      marginTop: '4px',
+                      maxHeight: '200px',
+                      overflowY: 'auto',
+                      background: 'white',
+                      boxShadow: '0 4px 6px rgba(0,0,0,0.1)'
+                    }}>
+                      {suggestions.map((p) => (
+                        <div
+                          key={p.id}
+                          onClick={() => selectProduct(p)}
+                          style={{
+                            padding: '10px 14px',
+                            cursor: 'pointer',
+                            borderBottom: '1px solid #f3f4f6',
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'center'
+                          }}
+                        >
+                          <span style={{ fontWeight: 500 }}>{p.name}</span>
+                          <span style={{ fontWeight: 600, color: '#9333ea' }}>{format(p.price || p.sellPrice || 0)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Quantity and Add */}
+                <div style={{ display: 'flex', gap: '10px', marginBottom: '20px' }}>
+                  <input
+                    ref={qtyRef}
+                    type="number"
+                    placeholder="Soni"
+                    value={selectedQty}
+                    onChange={e => setSelectedQty(e.target.value)}
+                    onKeyDown={e => e.key === 'Enter' && addItem()}
+                    style={{
+                      flex: 1,
+                      padding: '10px 14px',
+                      border: '1px solid #d1d5db',
+                      borderRadius: '6px',
+                      fontSize: '14px',
+                      outline: 'none'
+                    }}
+                    min="0.01"
+                    step="0.01"
+                  />
+                  <button
+                    onClick={addItem}
+                    style={{
+                      padding: '10px 20px',
+                      background: '#9333ea',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '6px',
+                      cursor: 'pointer',
+                      fontSize: '14px',
+                      fontWeight: 500,
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px'
+                    }}
+                  >
+                    <Plus size={16} />
+                    Qo'shish
+                  </button>
+                  <button
+                    onClick={() => setShowAddProduct(true)}
+                    style={{
+                      padding: '10px',
+                      background: 'white',
+                      color: '#666',
+                      border: '1px solid #d1d5db',
+                      borderRadius: '6px',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center'
+                    }}
+                    title="Yangi mahsulot"
+                  >
+                    <Plus size={18} />
+                  </button>
+                </div>
+
+                {/* Selected Product Info */}
+                {selectedProduct && (
+                  <div style={{
+                    padding: '16px',
+                    background: '#f5f0ff',
+                    borderRadius: '8px',
+                    border: '1px solid #9333ea'
+                  }}>
+                    <div style={{ fontWeight: 600, color: '#333', marginBottom: '4px' }}>{selectedProduct.name}</div>
+                    <div style={{ fontSize: '14px', color: '#9333ea', fontWeight: 500 }}>{format(selectedProduct.price || selectedProduct.sellPrice || 0)}</div>
+                  </div>
+                )}
+              </div>
+
+              {/* Right: Cart Items */}
+              <div style={{
+                background: 'white',
+                padding: '30px',
+                borderRadius: '12px',
+                boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
+              }}>
+                <div style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  marginBottom: '20px',
+                  paddingBottom: '10px',
+                  borderBottom: '2px solid #9333ea'
+                }}>
+                  <div style={{ fontSize: '16px', fontWeight: 600, color: '#9333ea', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <ShoppingCart size={18} />
+                    Savat ({items.length} ta)
+                  </div>
+                  <div style={{ fontSize: '20px', fontWeight: 700, color: '#9333ea' }}>{format(subtotal)}</div>
+                </div>
+
+                {items.length === 0 ? (
+                  <div style={{
+                    textAlign: 'center',
+                    padding: '40px 20px',
+                    color: '#9ca3af',
+                    background: '#fafafa',
+                    borderRadius: '8px',
+                    border: '2px dashed #e5e5e5'
+                  }}>
+                    <ShoppingCart size={48} style={{ marginBottom: '12px', opacity: 0.5 }} />
+                    <p style={{ fontSize: '14px' }}>Mahsulot qo'shing</p>
+                  </div>
+                ) : (
+                  <div style={{ maxHeight: '400px', overflowY: 'auto' }}>
+                    {items.map((item) => (
+                      <div
+                        key={item.productId}
+                        style={{
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'center',
+                          padding: '12px 0',
+                          borderBottom: '1px solid #f3f4f6'
+                        }}
+                      >
+                        <div style={{ flex: 1 }}>
+                          <div style={{ fontWeight: 500, color: '#333', marginBottom: '2px' }}>{item.name}</div>
+                          <div style={{ fontSize: '12px', color: '#666' }}>{format(item.price)} x {item.qty} {item.unit}</div>
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                          <input
+                            type="number"
+                            value={item.qty}
+                            onChange={e => updateItemQty(item.productId, e.target.value)}
+                            style={{
+                              width: '60px',
+                              textAlign: 'center',
+                              padding: '6px 8px',
+                              border: '1px solid #d1d5db',
+                              borderRadius: '4px',
+                              fontSize: '14px'
+                            }}
+                            min="0.01"
+                            step="0.01"
+                          />
+                          <div style={{ fontWeight: 600, color: '#9333ea', minWidth: '80px', textAlign: 'right' }}>
+                            {format(item.total)}
+                          </div>
+                          <button
+                            onClick={() => removeItem(item.productId)}
+                            style={{
+                              padding: '6px',
+                              background: 'none',
+                              border: 'none',
+                              cursor: 'pointer',
+                              color: '#ef4444'
+                            }}
+                          >
+                            <Trash2 size={16} />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
         </div>
       </div>
 

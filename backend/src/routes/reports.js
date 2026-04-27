@@ -288,7 +288,7 @@ async function reportRoutes(fastify) {
     // Calculate balance efficiently
     const [directIncome, allPayments] = await Promise.all([
       prisma.sale.aggregate({
-        _sum: { cashAmount: true, cardAmount: true },
+        _sum: { cashAmount: true, cardAmount: true, bankAmount: true },
         where: { businessId, status: 'completed' }
       }),
       prisma.payment.aggregate({
@@ -300,6 +300,7 @@ async function reportRoutes(fastify) {
     const balance = Math.round(
       (directIncome._sum.cashAmount || 0) + 
       (directIncome._sum.cardAmount || 0) + 
+      (directIncome._sum.bankAmount || 0) + 
       (allPayments._sum.amount || 0)
     );
 

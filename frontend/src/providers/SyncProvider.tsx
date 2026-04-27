@@ -54,10 +54,9 @@ export const SyncProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const custRes = results[1].status === 'fulfilled' ? results[1].value : null;
 
       if (prodRes) {
-        const products = Array.isArray(prodRes.data) ? prodRes.data : prodRes.data?.products || [];
+        // axios interceptor allaqachon response.data.data ni ochgan — prodRes o'zi data
+        const products = Array.isArray(prodRes) ? prodRes : prodRes?.products || [];
         if (products.length > 0) {
-          // SMARTER UPDATE: Instead of clear(), we can use bulkPut or similar
-          // For now, to ensure data consistency without complicated logic, we still use clear but only if we have data
           await db.products.clear();
           await db.products.bulkAdd(products.map((p: any) => ({
             id: p.id,
@@ -73,7 +72,8 @@ export const SyncProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
 
       if (custRes) {
-        const customers = Array.isArray(custRes.data) ? custRes.data : custRes.data?.customers || [];
+        // axios interceptor allaqachon response.data.data ni ochgan — custRes o'zi data
+        const customers = Array.isArray(custRes) ? custRes : custRes?.customers || [];
         if (customers.length > 0) {
           await db.customers.clear();
           await db.customers.bulkAdd(customers.map((c: any) => ({

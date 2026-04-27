@@ -247,6 +247,7 @@ class SaleService {
         await stockService.adjustStock({
           productId: item.productId,
           warehouseId,
+          businessId,              // ← Kritik: SaaS izolyatsiyasi uchun shart
           quantity: item.quantity,
           type: 'IN',
           reason: `Bekor qilingan sotuv #${sale.receiptNo}`,

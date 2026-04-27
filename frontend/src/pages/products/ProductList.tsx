@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Search, Plus, Filter, MoreVertical, Edit2, Trash2, Eye, Image } from 'lucide-react';
 import { productService } from '@/services/product.service';
 import { Product } from '@/types';
@@ -16,6 +16,19 @@ export default function ProductList() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [editProduct, setEditProduct] = useState<Product | null>(null);
   const [total, setTotal] = useState(0);
+  const [openDropdownId, setOpenDropdownId] = useState<number | null>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setOpenDropdownId(null);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   const fetchProducts = async () => {
     try {
@@ -65,7 +78,7 @@ export default function ProductList() {
           <h1 className="page-title">Mahsulotlar</h1>
           <p className="page-subtitle">Jami {total} ta mahsulot</p>
         </div>
-        <button className="btn btn-primary" onClick={() => { setEditProduct(null); setShowAddModal(true); }} style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+        <button type="button" className="btn btn-primary" onClick={() => { setEditProduct(null); setShowAddModal(true); }} style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
           <Plus size={16} /> Yangi mahsulot
         </button>
       </div>
@@ -83,7 +96,12 @@ export default function ProductList() {
             />
           </div>
           <div className="flex gap-2 w-full md:w-auto">
-            <button className="btn btn-outline" style={{ flex: 1 }}>
+            <button 
+              type="button" 
+              className="btn btn-outline" 
+              style={{ flex: 1 }}
+              onClick={() => toast.info('Kengaytirilgan filtrlar tez orada qo\'shiladi')}
+            >
               <Filter size={16} /> Filtr
             </button>
           </div>
@@ -169,39 +187,46 @@ export default function ProductList() {
                     {/* Desktop View Actions */}
                     <div className="nav-desktop" style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
                       <button
+                        type="button"
                         className="btn btn-ghost btn-icon btn-sm"
                         onClick={() => { setEditProduct(p); setShowAddModal(true); }}
+                        aria-label="Tahrirlash"
+                        title="Tahrirlash"
                       >
                         <Edit2 size={16} />
                       </button>
                       <button
+                        type="button"
                         className="btn btn-ghost btn-icon btn-sm"
                         style={{ color: 'var(--danger)' }}
                         onClick={() => handleDelete(p.id)}
+                        aria-label="O'chirish"
+                        title="O'chirish"
                       >
                         <Trash2 size={16} />
                       </button>
                     </div>
 
                     {/* Mobile View Actions (Three Dots) */}
-                    <div className="nav-mobile-only" style={{ display: 'none' }}>
+                    <div className="nav-mobile-only" style={{ display: 'none' }} ref={openDropdownId === p.id ? dropdownRef : undefined}>
                        <button 
+                        type="button"
                         className="btn btn-ghost btn-icon btn-sm"
-                        onClick={(e) => {
-                          const target = e.currentTarget.nextSibling as HTMLElement;
-                          if (target) target.style.display = target.style.display === 'none' ? 'block' : 'none';
-                        }}
+                        onClick={() => setOpenDropdownId(openDropdownId === p.id ? null : p.id)}
+                        aria-label="Amallar"
                        >
                          <MoreVertical size={18} />
                        </button>
-                       <div className="dropdown-menu" style={{ display: 'none', position: 'absolute', right: '0.5rem', top: '2.5rem', zIndex: 100, boxShadow: 'var(--shadow-lg)' }}>
-                          <div className="dropdown-item" onClick={() => { setEditProduct(p); setShowAddModal(true); }}>
-                            <Edit2 size={14} /> Tahrirlash
-                          </div>
-                          <div className="dropdown-item danger" onClick={() => handleDelete(p.id)}>
-                            <Trash2 size={14} /> O'chirish
-                          </div>
-                       </div>
+                       {openDropdownId === p.id && (
+                         <div className="dropdown-menu" style={{ display: 'block', position: 'absolute', right: '0.5rem', top: '2.5rem', zIndex: 100, boxShadow: 'var(--shadow-lg)' }}>
+                            <div className="dropdown-item" onClick={() => { setEditProduct(p); setShowAddModal(true); setOpenDropdownId(null); }}>
+                              <Edit2 size={14} /> Tahrirlash
+                            </div>
+                            <div className="dropdown-item danger" onClick={() => { handleDelete(p.id); setOpenDropdownId(null); }}>
+                              <Trash2 size={14} /> O'chirish
+                            </div>
+                         </div>
+                       )}
                     </div>
                   </td>
                 </tr>

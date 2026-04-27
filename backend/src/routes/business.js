@@ -52,7 +52,7 @@ async function businessRoutes(fastify) {
       });
 
       // Clear related report caches as settings (like currency) might affect calculations
-      await fastify.cache.invalidateEntity('report');
+      await fastify.cache.invalidateEntity('report', request.user.businessId);
 
       return sendSuccess(reply, {
         message: 'Sozlamalar muvaffaqiyatli saqlandi',

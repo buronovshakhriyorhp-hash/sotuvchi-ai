@@ -1,5 +1,5 @@
 const prisma = require('../prisma');
-const { sendSuccess } = require('../services/response.utility');
+const { sendSuccess, sendError } = require('../services/response.utility');
 
 const supplierSchema = {
   body: {
@@ -42,9 +42,23 @@ async function supplierRoutes(fastify) {
   });
 
   fastify.put('/:id', { preHandler: [fastify.authenticate] }, async (request, reply) => {
+    // SEC-05: Mass Assignment himoyasi — faqat ruxsat etilgan maydonlar
+    const { name, phone, category, region, address, note } = request.body || {};
+    const data = {};
+    if (name !== undefined)     data.name     = name;
+    if (phone !== undefined)    data.phone    = phone;
+    if (category !== undefined) data.category = category;
+    if (region !== undefined)   data.region   = region;
+    if (address !== undefined)  data.address  = address;
+    if (note !== undefined)     data.note     = note;
+
+    if (Object.keys(data).length === 0) {
+      return sendError(reply, 'O\'zgartirish uchun kamida bitta maydon kerak', 400);
+    }
+
     const s = await prisma.supplier.updateMany({ 
       where: { id: parseInt(request.params.id), businessId: request.user.businessId }, 
-      data: request.body 
+      data
     });
     if (s.count === 0) return sendError(reply, 'Ta\'minotchi topilmadi', 404);
     const updated = await prisma.supplier.findUnique({ where: { id: parseInt(request.params.id) } });

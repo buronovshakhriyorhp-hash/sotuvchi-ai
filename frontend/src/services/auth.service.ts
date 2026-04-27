@@ -16,7 +16,13 @@ class AuthService {
   }
 
   logout(): void {
-    localStorage.clear(); // Nuclear logout for security
+    // Faqat auth bilan bog'liq kalitlarni o'chirish — theme, currency, settings saqlanadi
+    localStorage.removeItem('token');
+    localStorage.removeItem('user');
+    localStorage.removeItem('nexus_pos_cart');
+    localStorage.removeItem('nexus_pos_customer');
+    localStorage.removeItem('nexus_pos_discount');
+    localStorage.removeItem('nexus_pos_warehouse');
   }
 }
 

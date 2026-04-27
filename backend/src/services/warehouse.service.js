@@ -25,13 +25,23 @@ class WarehouseService {
   }
 
   async createWarehouse(data, businessId) {
-    return await prisma.warehouse.create({ data: { ...data, businessId } });
+    // SEC-05: Mass Assignment himoyasi — faqat ruxsat etilgan maydonlar
+    const { name, address } = data || {};
+    if (!name) throw Object.assign(new Error('Ombor nomi kiritilishi shart'), { statusCode: 400 });
+    return await prisma.warehouse.create({ data: { name, address, businessId } });
   }
 
   async updateWarehouse(id, data, businessId) {
+    // SEC-05: Mass Assignment himoyasi — faqat ruxsat etilgan maydonlar
+    const { name, address, isActive } = data || {};
+    const updateData = {};
+    if (name !== undefined) updateData.name = name;
+    if (address !== undefined) updateData.address = address;
+    if (isActive !== undefined) updateData.isActive = isActive;
+
     const result = await prisma.warehouse.updateMany({
       where: { id: parseInt(id), businessId },
-      data
+      data: updateData
     });
     if (result.count === 0) throw Object.assign(new Error('Ombor topilmadi'), { statusCode: 404 });
     return await prisma.warehouse.findUnique({ where: { id: parseInt(id) } });
