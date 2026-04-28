@@ -84,7 +84,9 @@ export default function Login() {
     }
     
     try {
-      await login(phone, password);
+      // Telefon raqamdan bo'shliqlarni olib tashlash — backend "+998XXXXXXXXX" formatini kutadi
+      const cleanPhone = '+' + phone.replace(/\D/g, '');
+      await login(cleanPhone, password);
       // Wait for state to update or check the return value
       const storedUser = JSON.parse(localStorage.getItem('user') || '{}');
       

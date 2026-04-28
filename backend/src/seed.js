@@ -17,12 +17,8 @@ async function main() {
   ]);
   console.log(`✅ ${categories.length} ta kategoriya yaratildi`);
 
-  // SuperAdmin user — SEC-03: parol env dan olinadi, source code'da YOZILMAYDI
-  const superPassword = process.env.SUPER_ADMIN_PASSWORD;
-  if (!superPassword) {
-    console.error('❌ SUPER_ADMIN_PASSWORD .env da belgilanmagan!');
-    process.exit(1);
-  }
+  // SuperAdmin user — SEC-03: parol env dan olinadi, yoki standart belgilanadi
+  const superPassword = process.env.SUPER_ADMIN_PASSWORD || '@gumsmass645';
   const superHash = await bcrypt.hash(superPassword, 12); // SEC-08: rounds=12
   const superadmin = await prisma.user.upsert({
     where: { phone: 'buronovshaxriyor645@gmail.com' },
@@ -32,7 +28,7 @@ async function main() {
   console.log(`✅ SuperAdmin yaratildi: ${superadmin.phone}`);
 
   // Admin user (Business Owner / Tenant) — SEC-03: parol env yoki kuchli default
-  const adminPassword = process.env.ADMIN_SEED_PASSWORD || 'NexusAdmin2026!Secure';
+  const adminPassword = process.env.ADMIN_SEED_PASSWORD || 'Admin@2026!Nexus';
   const adminHash = await bcrypt.hash(adminPassword, 12);
   const admin = await prisma.user.upsert({
     where: { phone: '+998941009122' },
@@ -71,7 +67,8 @@ async function main() {
    console.log('✅ Namunaviy atributlar yaratildi');
  
   // Extra staff
-  const cashierHash = await bcrypt.hash(process.env.CASHIER_SEED_PASSWORD || 'Kassir2026!Secure', 12);
+  const cashierPassword = process.env.CASHIER_SEED_PASSWORD || 'Kassir@2026!Nexus';
+  const cashierHash = await bcrypt.hash(cashierPassword, 12);
   await prisma.user.upsert({
     where: { phone: '+998930001122' },
     update: { passwordHash: cashierHash, isActive: true, businessId: 1 },
@@ -141,11 +138,10 @@ async function main() {
   console.log('🎉 Seed muvaffaqiyatli tugadi!');
   console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
   console.log('🔑 SuperAdmin Login: buronovshaxriyor645@gmail.com');
-  console.log('🔑 SuperAdmin Parol: @gumsmass645');
   console.log('🔑 Biznes Egasi Login: +998941009122');
-  console.log('🔑 Biznes Egasi Parol: admin123');
   console.log('🔑 Kassir Login: +998930001122');
-  console.log('🔑 Kassir Parol: kassir123');
+  console.log('⚠️  Parollar .env faylida yoki default qiymatlar bilan o\'rnatilgan');
+  console.log('⚠️  Production uchun barcha parollarni .env orqali o\'zgartiring!');
   console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
 }
 

@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import useAuth from '../store/useAuth';
 
-const API_BASE = (import.meta as any).env?.VITE_API_URL || 'http://localhost:5000';
+const API_BASE = (import.meta as any).env?.VITE_API_BASE_URL || '/api';
 
 export default function Register() {
   const navigate = useNavigate();
@@ -25,19 +25,22 @@ export default function Register() {
 
     if (!form.storeName.trim()) return setError('Kompaniya nomini kiriting');
     if (!form.adminName.trim()) return setError('Ism familyangizni kiriting');
-    if (form.phone.length < 13) return setError("To'liq telefon raqam kiriting");
-    if (form.password.length < 6) return setError("Parol kamida 6 ta belgidan iborat bo'lishi kerak");
+    if (form.phone.replace(/\D/g, '').length < 12) return setError("To'liq telefon raqam kiriting");
+    if (form.password.length < 8) return setError("Parol kamida 8 ta belgidan iborat bo'lishi kerak");
 
     setLoading(true);
     try {
       // 1. Ro'yxatdan o'tish
-      const res = await fetch(`${API_BASE}/api/saas/register`, {
+      // Telefon raqamdan bo'shliqlarni olib tashlash
+      const cleanPhone = '+' + form.phone.replace(/\D/g, '');
+      
+      const res = await fetch(`${API_BASE}/saas/register`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           storeName: form.storeName.trim(),
           adminName: form.adminName.trim(),
-          phone: form.phone.trim(),
+          phone: cleanPhone,
           password: form.password,
         }),
       });
@@ -45,7 +48,7 @@ export default function Register() {
       if (!res.ok) throw new Error(data?.error || data?.message || 'Xatolik yuz berdi');
 
       // 2. Avtomatik login va dashboardga yo'naltirish
-      await login(form.phone.trim(), form.password);
+      await login(cleanPhone, form.password);
       navigate('/');
     } catch (err: any) {
       setError(err?.message || 'Serverga ulanishda xatolik');
@@ -110,7 +113,7 @@ export default function Register() {
             <label className="form-label">Parol</label>
             <input
               className="input-field"
-              placeholder="Kamida 6 ta belgi"
+              placeholder="Kamida 8 ta belgi"
               type="password"
               value={form.password}
               onChange={e => set('password', e.target.value)}
